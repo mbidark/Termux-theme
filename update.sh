@@ -2,25 +2,17 @@
 set -e
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
 
-echo
-printf '\033[1;32m[+] Checking GitHub updates...\033[0m\n'
-
-if [ ! -d "$ROOT/.git" ]; then
-    echo "[!] This directory is not a Git repository."
-    echo "[!] Clone it first:"
-    echo "    git clone https://github.com/mbidark/Termux-theme.git"
+if [ ! -d .git ]; then
+    echo "[!] Git repository not found."
     exit 1
 fi
 
-cd "$ROOT"
-
+echo "[+] Updating DARK HOST..."
 git pull --ff-only
 
-echo
-printf '\033[1;32m[+] Applying latest theme...\033[0m\n'
 chmod +x install.sh update.sh uninstall.sh
 ./install.sh
 
-echo
-printf '\033[1;32m[✓] DARK HOST updated successfully.\033[0m\n'
+echo "[✓] DARK HOST updated."

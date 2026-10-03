@@ -1,66 +1,45 @@
 # DARK HOST — Termux Hacker Theme
 
-A minimal hacker-style green Termux theme.
+A permanent DARK HOST startup theme for Termux.
 
 ## Features
 
-- Hacker green terminal
-- DARK HOST startup banner
-- Custom two-line prompt
-- Black/green terminal palette
-- Hidden Termux extra-key row
-- Automatic configuration backup
-- One-command GitHub update
-- Uninstall / restore support
+- DARK HOST branding
+- Hacker green colors
+- Permanent startup loading
+- `.bash_profile` and `.profile` fallback
+- Custom prompt
+- Hidden extra-key row
+- Backup and restore
+- GitHub update script
+- No config subfolders in the repository
 
 ## Install
 
 ```bash
 pkg install git -y
-git clone https://github.com/mbidark/Termux-theme.git
-cd Termux-theme
+git clone https://github.com/mbidark/Termux-theme.git ~/Termux-theme
+cd ~/Termux-theme
 chmod +x *.sh
 ./install.sh
 ```
 
-## Update
+Then completely close and reopen Termux.
 
-After a new version is pushed to GitHub:
+## Update
 
 ```bash
 cd ~/Termux-theme
 ./update.sh
 ```
 
-Or:
-
-```bash
-git pull
-./install.sh
-```
-
 ## Uninstall
 
 ```bash
+cd ~/Termux-theme
 ./uninstall.sh
 ```
 
-## Project structure
+## Important
 
-Everything is kept in the root directory:
-
-```text
-Termux-theme/
-├── bashrc
-├── colors.properties
-├── termux.properties
-├── install.sh
-├── update.sh
-├── uninstall.sh
-├── README.md
-└── LICENSE
-```
-
-## License
-
-MIT
+This changes the terminal's branding and startup interface. It does not change the Android application's actual name from "Termux" because that is controlled by the installed Android app.

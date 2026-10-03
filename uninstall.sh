@@ -4,20 +4,18 @@ set -e
 TERMUX_DIR="$HOME/.termux"
 BACKUP_DIR="$HOME/.dark-host-backup"
 
-echo "[+] Removing DARK HOST theme..."
+restore() {
+    local backup="$BACKUP_DIR/$(basename "$1").bak"
+    [ -f "$backup" ] && cp "$backup" "$1"
+}
 
-if [ -f "$BACKUP_DIR/bashrc.bak" ]; then
-    cp "$BACKUP_DIR/bashrc.bak" "$HOME/.bashrc"
-fi
-
-if [ -f "$BACKUP_DIR/colors.properties.bak" ]; then
-    cp "$BACKUP_DIR/colors.properties.bak" "$TERMUX_DIR/colors.properties"
-fi
-
-if [ -f "$BACKUP_DIR/termux.properties.bak" ]; then
-    cp "$BACKUP_DIR/termux.properties.bak" "$TERMUX_DIR/termux.properties"
-fi
+restore "$HOME/.bashrc"
+restore "$HOME/.bash_profile"
+restore "$HOME/.profile"
+restore "$TERMUX_DIR/colors.properties"
+restore "$TERMUX_DIR/termux.properties"
 
 termux-reload-settings 2>/dev/null || true
 
-echo "[✓] DARK HOST removed."
+echo "[✓] DARK HOST removed/restored."
+echo "[i] Restart Termux."
