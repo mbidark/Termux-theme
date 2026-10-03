@@ -351,6 +351,68 @@ __darkhost_scan() {
   printf '\nSYSTEM HEALTH: GOOD\n'
 }
 
+__darkhost_privileged_install() {
+  local -a privilege=()
+
+  if (( EUID != 0 )); then
+    if command -v sudo >/dev/null 2>&1; then
+      privilege=(sudo)
+    elif command -v doas >/dev/null 2>&1; then
+      privilege=(doas)
+    else
+      printf 'This package manager requires root. Install with sudo/doas or run as root.\n' >&2
+      return 1
+    fi
+  fi
+
+  "${privilege[@]}" "$@"
+}
+
+__darkhost_install() {
+  if [[ $# -eq 0 || "${1:-}" == "--help" ]]; then
+    printf 'Usage: dh install <package> [package ...]\n'
+    printf 'Detects a supported package manager and runs its normal install flow.\n'
+    return 0
+  fi
+
+  local manager
+  if command -v pkg >/dev/null 2>&1; then
+    manager=pkg
+  elif command -v apt-get >/dev/null 2>&1; then
+    manager=apt-get
+  elif command -v dnf >/dev/null 2>&1; then
+    manager=dnf
+  elif command -v yum >/dev/null 2>&1; then
+    manager=yum
+  elif command -v pacman >/dev/null 2>&1; then
+    manager=pacman
+  elif command -v apk >/dev/null 2>&1; then
+    manager=apk
+  elif command -v zypper >/dev/null 2>&1; then
+    manager=zypper
+  elif command -v brew >/dev/null 2>&1; then
+    manager=brew
+  else
+    printf 'No supported package manager found (pkg, apt-get, dnf, yum, pacman, apk, zypper, brew).\n' >&2
+    return 127
+  fi
+
+  printf 'Package manager: %s\n' "$manager"
+  case "$manager" in
+    pkg) pkg update && pkg upgrade && pkg install "$@" ;;
+    apt-get)
+      __darkhost_privileged_install apt-get update &&
+        __darkhost_privileged_install apt-get upgrade &&
+        __darkhost_privileged_install apt-get install "$@"
+      ;;
+    dnf|yum) __darkhost_privileged_install "$manager" install "$@" ;;
+    pacman) __darkhost_privileged_install pacman -S --needed "$@" ;;
+    apk) __darkhost_privileged_install apk add "$@" ;;
+    zypper) __darkhost_privileged_install zypper install "$@" ;;
+    brew) brew install "$@" ;;
+  esac
+}
+
 __darkhost_dashboard() {
   local user_name="${DARKHOST_USERNAME:-dark}"
   local cpu ram disk
@@ -392,6 +454,7 @@ __darkhost_help() {
     "ping|Safe diagnostic ping to a target"
     "ports|Listening local ports"
     "scan|Local safe diagnostic scan"
+    "install|Install packages with the detected package manager"
     "lock|Lock the Dark Host session"
     "vault|Protected local workspace"
     "logs|Recent Dark Host session logs"
@@ -444,6 +507,7 @@ __darkhost_help() {
 ║  dh monitor    live monitor           ║
 ║  dh doctor     health checks          ║
 ║  dh repair     repair helper          ║
+║  dh install    install packages       ║
 ║                                      ║
 ║ NETWORK                               ║
 ║  dh network    network status         ║
@@ -825,7 +889,7 @@ __darkhost_complete() {
   local cur="${COMP_WORDS[COMP_CWORD]}"
   local suggestions=(
     'dh' 'dh help' 'dh status' 'dh system' 'dh user' 'dh network' 'dh memory' 'dh storage'
-    'dh processes' 'dh scan' 'dh tools' 'dh theme' 'dh settings' 'dh update' 'dh version'
+    'dh processes' 'dh scan' 'dh install' 'dh tools' 'dh theme' 'dh settings' 'dh update' 'dh version'
     'dh about' 'dh logout' 'dh lock' 'dh clear' 'dh monitor' 'dh ping' 'dh ports' 'dh battery'
     'dh wifi' 'dh device' 'dh uptime' 'dh logs' 'dh security' 'dh sessions' 'dh vault' 'dh doctor'
     'dh repair' 'dh mode' 'dh alias' 'dh plugin' 'dh ghost' 'dh void' 'dh 404' 'dh shadow' 'dh root'
@@ -893,6 +957,7 @@ dh() {
     storage) __darkhost_storage ;;
     processes) __darkhost_processes ;;
     scan) __darkhost_scan ;;
+    install) shift; __darkhost_install "$@" ;;
     tools) printf 'pkg apt git python node npm ssh\n' ;;
     theme) __darkhost_theme "${2:-}" ;;
     settings) __darkhost_settings ;;

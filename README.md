@@ -12,9 +12,16 @@ Give your Termux prompt a new identity without replacing the tools underneath. D
 
 ## Start Here
 
-Clone the project and run the installer:
+For a fresh Termux install, copy and run this single line:
 
 ```bash
+pkg update && pkg upgrade && pkg install git && git clone https://github.com/mbidark/Termux-theme.git ~/Dark && cd ~/Dark && chmod +x ./*.sh && ./install.sh
+```
+
+Or run the steps separately:
+
+```bash
+pkg update && pkg upgrade && pkg install git
 git clone https://github.com/mbidark/Termux-theme.git ~/Dark
 cd ~/Dark
 chmod +x ./*.sh
@@ -34,9 +41,17 @@ If the installer runs without an interactive terminal, it creates the default pr
 | Network | `dh network`, `dh wifi`, `dh ping`, `dh ports`, `dh scan` |
 | Workspace | `dh theme`, `dh mode`, `dh banner`, `dh settings`, `dh alias`, `dh plugin` |
 | Session | `dh lock`, `dh logout`, `dh pause`, `dh resume`, `dh history`, `dh logs` |
-| Maintenance | `dh doctor`, `dh repair`, `dh update`, `dh help` |
+| Maintenance | `dh install <package>`, `dh doctor`, `dh repair`, `dh update`, `dh help` |
 
 Get the full list with `dh help`; get details on a command with `dh help <command>`.
+
+Install packages with the detected system package manager:
+
+```bash
+dh install git
+```
+
+Dark Host detects Termux `pkg`, Debian/Ubuntu `apt-get`, Fedora `dnf`/`yum`, Arch `pacman`, Alpine `apk`, openSUSE `zypper`, or Homebrew. Before installing, the Termux path runs `pkg update` and `pkg upgrade`; Debian/Ubuntu runs `apt-get update` and `apt-get upgrade`. On Linux, it uses `sudo` or `doas` when elevated access is needed. The package manager handles its normal prompts; no shell evaluation or silent auto-confirm is used. Run `dh install --help` for usage.
 
 ## Make It Yours
 
