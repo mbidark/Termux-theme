@@ -26,6 +26,11 @@ mkcd() {
 if [[ -f "$HOME/.darkrc" ]]; then
   source "$HOME/.darkrc"
 fi
+
+if [[ -f "$HOME/.darkhost/darkhost.sh" ]]; then
+  . "$HOME/.darkhost/darkhost.sh"
+fi
+
 DARK_INTRO=${DARK_INTRO:-1}
 DARK_INTRO_DELAY=${DARK_INTRO_DELAY:-0.04}
 DARK_PROMPT_LABEL=${DARK_PROMPT_LABEL:-dark}

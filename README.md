@@ -1,5 +1,14 @@
-# DARK Termux Theme
-Advanced hacker-style Termux theme.
+# DARK HOST V2
+A modular hacker-style terminal environment for Termux that keeps the normal Linux environment available while adding a custom Dark Host identity, login flow, dashboard, command engine, and persistent configuration layer.
+
+## What is included
+- Secure local login layer
+- Dynamic prompt with current path and git status
+- `dh` command engine for status, system, network, monitor, vault, theme, profile, settings, and more
+- Persistent configuration under `~/.darkhost/`
+- Safe diagnostics, command help, and hidden command layer
+- Startup bootstrap loaded from `.bashrc` / `.bash_profile` / `.profile`
+- Backup-safe install, update, and uninstall scripts
 
 ## Install
 ```bash
@@ -14,18 +23,15 @@ chmod +x *.sh
 cd ~/Dark && ./update.sh
 ```
 
-The repository folder is intentionally `~/Dark`, so the prompt shows `Dark` instead of `Termux-theme`.
+## Uninstall
+```bash
+cd ~/Dark && ./uninstall.sh
+```
 
-## Customize
-
-The installer creates `~/.darkrc` only when it does not already exist. Edit it to customize the intro and prompt; your file is preserved by reinstalling or updating the theme.
-
-Available settings include `DARK_INTRO` (`1`/`0`), `DARK_INTRO_DELAY` (seconds), `DARK_PROMPT_LABEL`, `DARK_PROMPT_COLOR`, `DARK_ACCENT_COLOR`, and the `DARK_SHOW_DEVICE`, `DARK_SHOW_ANDROID`, and `DARK_SHOW_MEMORY` detail toggles. Colors: `green`, `cyan`, `blue`, `red`, `yellow`, `magenta`, or `white`.
-
-## Shortcuts
-
-`cl` clears the screen; `l`, `ll`, `la`, and `lt` provide common directory listings; `..`, `...`, and `....` move up one, two, or three directories. `h` shows history, `g` is Git, `glog` shows a compact graph, `dfh` and `duh` show disk usage, and `mkcd <dir>` creates then enters a directory. `reload` reloads `~/.bashrc`.
+## Default login
+- Username: `dark`
+- Password: `darkhost`
+- Recovery: type `RESET` during login to restore the default credentials.
 
 ## Notes
-This changes the shell prompt and startup branding. It cannot rename the Android app itself; that requires modifying/rebuilding the APK.
-Uninstall leaves `~/.darkrc` in place so your personal settings are not lost.
+This project intentionally layers a custom Dark Host experience on top of normal Termux/Linux. Standard commands remain available, and the environment stays compatible with Bash, Git, SSH, Python, Node, npm, and other regular Termux workflows.
