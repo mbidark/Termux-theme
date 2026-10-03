@@ -8,6 +8,7 @@ for f in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$T/colors.prope
   [ -f "$f" ] && cp -n "$f" "$B/$(basename "$f").bak" 2>/dev/null || true
 done
 cp "$ROOT/bashrc" "$HOME/.bashrc"
+cp -n "$ROOT/darkrc" "$HOME/.darkrc"
 cp "$ROOT/bash_profile" "$HOME/.bash_profile"
 cp "$ROOT/profile" "$HOME/.profile"
 cp "$ROOT/colors.properties" "$T/colors.properties"
@@ -31,4 +32,5 @@ echo
 echo "[✓] DARK theme installed permanently."
 echo "[✓] Termux welcome text hidden."
 echo "[✓] Extra keys hidden."
+echo "[✓] Personal options: ~/.darkrc"
 echo "[✓] Restart Termux."
