@@ -43,21 +43,78 @@ __darkhost_ensure_layout() {
   touch "$DARKHOST_LOG_FILE" 2>/dev/null || true
 }
 
-__darkhost_default_config() {
-  cat > "$DARKHOST_CONFIG_FILE" <<'CFG'
-DARKHOST_USERNAME="dark"
-DARKHOST_PASSWORD="darkhost"
-DARKHOST_THEME="black"
-DARKHOST_LABEL="dark"
-DARKHOST_BANNER=1
-DARKHOST_STARTUP=1
-DARKHOST_HACKER=0
-DARKHOST_LOGIN_MODE="secure"
-DARKHOST_ANIMATIONS=1
-DARKHOST_MODE="normal"
+__darkhost_write_config() {
+  cat > "$DARKHOST_CONFIG_FILE" <<CFG
+DARKHOST_USERNAME="${DARKHOST_USERNAME:-dark}"
+DARKHOST_PASSWORD="${DARKHOST_PASSWORD:-darkhost}"
+DARKHOST_THEME="${DARKHOST_THEME:-black}"
+DARKHOST_LABEL="${DARKHOST_LABEL:-dark}"
+DARKHOST_BANNER=${DARKHOST_BANNER:-1}
+DARKHOST_STARTUP=${DARKHOST_STARTUP:-1}
+DARKHOST_HACKER=${DARKHOST_HACKER:-0}
+DARKHOST_LOGIN_MODE="${DARKHOST_LOGIN_MODE:-secure}"
+DARKHOST_ANIMATIONS=${DARKHOST_ANIMATIONS:-1}
+DARKHOST_MODE="${DARKHOST_MODE:-normal}"
+DARKHOST_VERSION="2.0.0"
 CFG
-  printf '%s\n' "dark" > "$DARKHOST_USER_FILE" 2>/dev/null || true
-  printf '%s\n' "darkhost" > "$DARKHOST_PASS_FILE" 2>/dev/null || true
+  printf '%s\n' "${DARKHOST_USERNAME:-dark}" > "$DARKHOST_USER_FILE" 2>/dev/null || true
+  printf '%s\n' "${DARKHOST_PASSWORD:-darkhost}" > "$DARKHOST_PASS_FILE" 2>/dev/null || true
+}
+
+__darkhost_default_config() {
+  __darkhost_write_config
+}
+
+__darkhost_config_wizard() {
+  local username password theme label banner animations mode
+
+  if [[ ! -t 0 ]]; then
+    __darkhost_default_config
+    return 0
+  fi
+
+  printf '\nDARK HOST SETUP\n'
+  printf 'Configure your local identity.\n\n'
+  read -p 'Username [dark]: ' username
+  username="${username:-dark}"
+
+  read -s -p 'Password [darkhost]: ' password
+  printf '\n'
+  password="${password:-darkhost}"
+
+  read -p 'Theme [black/blood/matrix/ghost/void/cyber/terminal] [black]: ' theme
+  theme="${theme:-black}"
+
+  read -p 'Prompt label [dark]: ' label
+  label="${label:-dark}"
+
+  read -p 'Startup banner [1/0] [1]: ' banner
+  banner="${banner:-1}"
+  if [[ ! "$banner" =~ ^[01]$ ]]; then banner=1; fi
+
+  read -p 'Animations [1/0] [1]: ' animations
+  animations="${animations:-1}"
+  if [[ ! "$animations" =~ ^[01]$ ]]; then animations=1; fi
+
+  read -p 'Mode [normal/hacker/ghost/matrix/forensic/void/minimal] [normal]: ' mode
+  mode="${mode:-normal}"
+
+  DARKHOST_USERNAME="$username"
+  DARKHOST_PASSWORD="$password"
+  DARKHOST_THEME="$theme"
+  DARKHOST_LABEL="$label"
+  DARKHOST_BANNER="$banner"
+  DARKHOST_STARTUP="1"
+  DARKHOST_HACKER=0
+  DARKHOST_LOGIN_MODE="secure"
+  DARKHOST_ANIMATIONS="$animations"
+  DARKHOST_MODE="$mode"
+
+  __darkhost_write_config
+  printf '\nDark Host profile saved.\n'
+  printf 'User: %s\n' "$username"
+  printf 'Theme: %s\n' "$theme"
+  printf 'Mode: %s\n' "$mode"
 }
 
 __darkhost_load_config() {
@@ -112,17 +169,23 @@ __darkhost_matrix_fail() {
 }
 
 __darkhost_access_granted() {
+  clear
   printf '\n[✓] Identity verified\n'
   printf '[✓] Secure session established\n'
   printf '[✓] Dark Core loaded\n'
   printf '[✓] Command Engine loaded\n'
   printf '[✓] Suggestion Engine loaded\n\n'
-  printf 'Initializing DARK CORE...\n'
-  for _ in 1 2 3 4 5 6; do
-    printf '█'
-    sleep 0.09
-  done
-  printf '\n\nACCESS GRANTED\n\n'
+  if [[ "${DARKHOST_ANIMATIONS:-1}" == "1" ]]; then
+    printf 'Initializing DARK CORE...\n'
+    for _ in 1 2 3 4 5 6; do
+      printf '█'
+      sleep 0.09
+    done
+    printf '\n\nACCESS GRANTED\n\n'
+  else
+    printf 'ACCESS GRANTED\n\n'
+  fi
+  clear
 }
 
 __darkhost_login_banner() {
@@ -452,8 +515,73 @@ __darkhost_profile() {
 }
 
 __darkhost_settings() {
-  printf 'DARK HOST SETTINGS\n'
-  printf 'Username: %s\n' "${DARKHOST_USERNAME:-dark}"
+  if [[ ! -t 0 ]]; then
+    printf 'DARK HOST SETTINGS\n'
+    printf 'Username: %s\n' "${DARKHOST_USERNAME:-dark}"
+    printf 'Theme: %s\n' "${DARKHOST_THEME:-black}"
+    printf 'Prompt: %s\n' "${DARKHOST_LABEL:-dark}"
+    printf 'Mode: %s\n' "${DARKHOST_MODE:-normal}"
+    printf 'Recovery: type RESET during login to restore defaults\n'
+    return 0
+  fi
+
+  printf '\nDARK HOST SETTINGS\n'
+  printf '[1] Edit username/password\n'
+  printf '[2] Change theme\n'
+  printf '[3] Change mode\n'
+  printf '[4] Toggle startup banner and animations\n'
+  printf '[5] Show current profile\n'
+  printf '[6] Save and exit\n'
+  read -p 'Selection [6]: ' choice
+  choice="${choice:-6}"
+
+  case "$choice" in
+    1)
+      read -p 'Username ['"${DARKHOST_USERNAME:-dark}"']: ' username
+      username="${username:-${DARKHOST_USERNAME:-dark}}"
+      read -s -p 'Password ['"${DARKHOST_PASSWORD:-darkhost}"']: ' password
+      printf '\n'
+      password="${password:-${DARKHOST_PASSWORD:-darkhost}}"
+      DARKHOST_USERNAME="$username"
+      DARKHOST_PASSWORD="$password"
+      __darkhost_write_config
+      printf 'Credentials updated.\n'
+      ;;
+    2)
+      read -p 'Theme [black/blood/matrix/ghost/void/cyber/terminal] ['"${DARKHOST_THEME:-black}"']: ' theme
+      theme="${theme:-${DARKHOST_THEME:-black}}"
+      DARKHOST_THEME="$theme"
+      __darkhost_write_config
+      printf 'Theme set to %s\n' "$theme"
+      ;;
+    3)
+      read -p 'Mode [normal/hacker/ghost/matrix/forensic/void/minimal] ['"${DARKHOST_MODE:-normal}"']: ' mode
+      mode="${mode:-${DARKHOST_MODE:-normal}}"
+      DARKHOST_MODE="$mode"
+      __darkhost_write_config
+      printf 'Mode set to %s\n' "$mode"
+      ;;
+    4)
+      read -p 'Startup banner [1/0] ['"${DARKHOST_BANNER:-1}"']: ' banner
+      banner="${banner:-${DARKHOST_BANNER:-1}}"
+      if [[ ! "$banner" =~ ^[01]$ ]]; then banner=1; fi
+      read -p 'Animations [1/0] ['"${DARKHOST_ANIMATIONS:-1}"']: ' animations
+      animations="${animations:-${DARKHOST_ANIMATIONS:-1}}"
+      if [[ ! "$animations" =~ ^[01]$ ]]; then animations=1; fi
+      DARKHOST_BANNER="$banner"
+      DARKHOST_ANIMATIONS="$animations"
+      __darkhost_write_config
+      printf 'Banner/animations updated.\n'
+      ;;
+    5)
+      __darkhost_profile
+      ;;
+    *)
+      __darkhost_write_config
+      ;;
+  esac
+
+  printf '\nUsername: %s\n' "${DARKHOST_USERNAME:-dark}"
   printf 'Theme: %s\n' "${DARKHOST_THEME:-black}"
   printf 'Prompt: %s\n' "${DARKHOST_LABEL:-dark}"
   printf 'Mode: %s\n' "${DARKHOST_MODE:-normal}"

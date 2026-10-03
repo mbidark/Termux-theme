@@ -4,6 +4,70 @@ set -eu
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 T="$HOME/.termux"
 B="$HOME/.dark-backup"
+CONFIG_FILE="$HOME/.darkhost/config/darkhost.conf"
+
+__darkhost_setup_wizard() {
+  if [[ ! -t 0 ]]; then
+    cat > "$CONFIG_FILE" <<'EOF'
+DARKHOST_USERNAME="dark"
+DARKHOST_PASSWORD="darkhost"
+DARKHOST_THEME="black"
+DARKHOST_LABEL="dark"
+DARKHOST_BANNER=1
+DARKHOST_STARTUP=1
+DARKHOST_HACKER=0
+DARKHOST_LOGIN_MODE="secure"
+DARKHOST_ANIMATIONS=1
+DARKHOST_MODE="normal"
+DARKHOST_VERSION="2.0.0"
+EOF
+    printf '%s\n' "dark" > "$HOME/.darkhost/username" 2>/dev/null || true
+    printf '%s\n' "darkhost" > "$HOME/.darkhost/password" 2>/dev/null || true
+    return 0
+  fi
+
+  printf '\nDARK HOST SETUP\n'
+  printf 'Create your local terminal identity.\n\n'
+  read -p 'Username [dark]: ' username
+  username="${username:-dark}"
+  read -s -p 'Password [darkhost]: ' password
+  printf '\n'
+  password="${password:-darkhost}"
+  read -p 'Theme [black/blood/matrix/ghost/void/cyber/terminal] [black]: ' theme
+  theme="${theme:-black}"
+  read -p 'Prompt label [dark]: ' label
+  label="${label:-dark}"
+  read -p 'Mode [normal/hacker/ghost/matrix/forensic/void/minimal] [normal]: ' mode
+  mode="${mode:-normal}"
+  read -p 'Startup banner [1/0] [1]: ' banner
+  banner="${banner:-1}"
+  if [[ ! "$banner" =~ ^[01]$ ]]; then banner=1; fi
+  read -p 'Animations [1/0] [1]: ' animations
+  animations="${animations:-1}"
+  if [[ ! "$animations" =~ ^[01]$ ]]; then animations=1; fi
+
+  cat > "$CONFIG_FILE" <<EOF
+DARKHOST_USERNAME="${username}"
+DARKHOST_PASSWORD="${password}"
+DARKHOST_THEME="${theme}"
+DARKHOST_LABEL="${label}"
+DARKHOST_BANNER=${banner}
+DARKHOST_STARTUP=1
+DARKHOST_HACKER=0
+DARKHOST_LOGIN_MODE="secure"
+DARKHOST_ANIMATIONS=${animations}
+DARKHOST_MODE="${mode}"
+DARKHOST_VERSION="2.0.0"
+EOF
+
+  printf '%s\n' "$username" > "$HOME/.darkhost/username" 2>/dev/null || true
+  printf '%s\n' "$password" > "$HOME/.darkhost/password" 2>/dev/null || true
+  printf '\nProfile saved.\n'
+  printf 'Username: %s\n' "$username"
+  printf 'Theme: %s\n' "$theme"
+  printf 'Mode: %s\n' "$mode"
+}
+
 mkdir -p "$T" "$B"
 
 for f in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$T/colors.properties" "$T/termux.properties"; do
@@ -32,22 +96,20 @@ cp "$ROOT/termux.properties" "$T/termux.properties"
 cp "$ROOT/darkhost.sh" "$HOME/.darkhost/darkhost.sh"
 chmod +x "$HOME/.darkhost/darkhost.sh"
 
-if [[ ! -f "$HOME/.darkhost/config/darkhost.conf" ]]; then
-  cat > "$HOME/.darkhost/config/darkhost.conf" <<'EOF'
-DARKHOST_USERNAME="dark"
-DARKHOST_PASSWORD="darkhost"
-DARKHOST_THEME="black"
-DARKHOST_LABEL="dark"
-DARKHOST_BANNER=1
-DARKHOST_STARTUP=1
-DARKHOST_HACKER=0
-DARKHOST_LOGIN_MODE="secure"
-DARKHOST_ANIMATIONS=1
-DARKHOST_MODE="normal"
-EOF
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  __darkhost_setup_wizard
+else
+  if [[ -t 0 ]]; then
+    printf '\nDark Host profile already exists.\n'
+    read -p 'Reconfigure now? [Y/n]: ' reconfigure
+    if [[ -z "$reconfigure" || "$reconfigure" =~ ^[Yy]$ ]]; then
+      __darkhost_setup_wizard
+    fi
+  fi
 fi
-printf '%s\n' "dark" > "$HOME/.darkhost/username" 2>/dev/null || true
-printf '%s\n' "darkhost" > "$HOME/.darkhost/password" 2>/dev/null || true
+
+printf '%s\n' "$(grep '^DARKHOST_USERNAME=' "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || printf 'dark')" > "$HOME/.darkhost/username" 2>/dev/null || true
+printf '%s\n' "$(grep '^DARKHOST_PASSWORD=' "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || printf 'darkhost')" > "$HOME/.darkhost/password" 2>/dev/null || true
 
 touch "$HOME/.hushlogin"
 termux-reload-settings 2>/dev/null || true
@@ -58,7 +120,6 @@ if [[ -f "$HOME/.darkhost/darkhost.sh" ]]; then
   . "$HOME/.darkhost/darkhost.sh"
 fi
 
-# Preserve normal shell aliases/functions from the repo defaults.
 export DARK_TERMUX=1
 alias c='clear'
 alias cl='clear'
@@ -107,5 +168,4 @@ echo
 echo "[✓] Dark Host shell installed permanently."
 echo "[✓] Bash bootstrap configured."
 echo "[✓] Persistent config folder: ~/.darkhost"
-echo "[✓] Default login: dark / darkhost"
 echo "[✓] Restart Termux to begin."
