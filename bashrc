@@ -4,16 +4,31 @@ alias c='clear'
 alias cls='clear'
 alias ll='ls -lah'
 alias la='ls -A'
+if [[ $- == *i* ]]; then
+  set -o emacs
+  bind '"\e[H": beginning-of-line'
+  bind '"\eOH": beginning-of-line'
+  bind '"\e[1~": beginning-of-line'
+  bind '"\e[F": end-of-line'
+  bind '"\eOF": end-of-line'
+  bind '"\e[4~": end-of-line'
+  bind '"\e[3~": delete-char'
+  bind '"\e[1;5C": forward-word'
+  bind '"\e[1;5D": backward-word'
+  bind '"\e[5C": forward-word'
+  bind '"\e[5D": backward-word'
+  bind '"\e[A": history-search-backward'
+  bind '"\e[B": history-search-forward'
+fi
 if [ -z "$DARK_THEME_SHOWN" ]; then
 export DARK_THEME_SHOWN=1
 green='\033[1;32m'
 cyan='\033[1;36m'
-dim='\033[2m'
 reset='\033[0m'
 printf "$green\n  [ DARK HOST ]  [ STARTING ]$reset\n"
 bar=''
 for step in 1 2 3 4 5; do
-  bar="${bar}##"
+  bar="${bar}▰▰"
   printf '\r  %bInitializing [%-10s] %s%%%b' "$cyan" "$bar" "$((step * 20))" "$reset"
   sleep 0.04
 done
@@ -26,6 +41,15 @@ memory_total="$(awk '/MemTotal/ { printf "%.1f GiB", $2 / 1048576 }' /proc/memin
 printf '\r%b  [ DARK HOST ]  [ ONLINE ]%b\033[K\n' "$green" "$reset"
 sleep 0.25
 printf '\033[2J\033[H'
+printf '  %b███    ██    ███  █  █%b\n' "$cyan" "$reset"
+sleep 0.03
+printf '  %b█  █  █  █  █  █ █ █%b\n' "$cyan" "$reset"
+sleep 0.03
+printf '  %b█  █  ████  ███  ██%b\n' "$green" "$reset"
+sleep 0.03
+printf '  %b█  █  █  █  █ █  █ █%b\n' "$green" "$reset"
+sleep 0.03
+printf '  %b███   █  █  █  █ █  █%b\n\n' "$green" "$reset"
 printf '%b╭─────────────────────────────────╮%b\n' "$green" "$reset"
 printf '│%*s%*s│\n' 20 'D A R K   H O S T' 13 ''
 printf '│                                 │\n'
