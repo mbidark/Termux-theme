@@ -24,6 +24,7 @@ DARKHOST_PASS_FILE="$DARKHOST_DIR/password"
 
 export HISTFILE="$DARKHOST_HISTORY_FILE"
 export HISTSIZE=2000
+export HISTFILESIZE=5000
 export SAVEHIST=2000
 
 __darkhost_ensure_layout() {
@@ -351,6 +352,98 @@ __darkhost_scan() {
   printf '\nSYSTEM HEALTH: GOOD\n'
 }
 
+__darkhost_media_open() {
+  if command -v termux-open >/dev/null 2>&1; then
+    termux-open "$1"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$1"
+  elif command -v mpv >/dev/null 2>&1; then
+    mpv -- "$1"
+  else
+    printf 'No media opener found. Install mpv or use an Android app that opens this file type.\n' >&2
+    return 127
+  fi
+}
+
+__darkhost_media() {
+  local action="${1:-help}" target resource extension is_url=0
+
+  case "$action" in
+    help|--help|-h)
+      printf 'Usage: dh media play <file-or-url>\n'
+      printf '       dh media pause|stop|info\n'
+      printf 'Uses mpv, Termux:API, or your system media app when available.\n'
+      return 0
+      ;;
+    play)
+      shift
+      if [[ $# -ne 1 ]]; then
+        printf 'Usage: dh media play <file-or-url>\n' >&2
+        return 2
+      fi
+      target="$1"
+      if [[ "$target" =~ ^[[:alpha:]][[:alnum:].+-]*:// ]]; then
+        is_url=1
+      elif [[ ! -e "$target" ]]; then
+        printf 'Media file not found: %s\n' "$target" >&2
+        return 2
+      fi
+
+      resource="${target%%\?*}"
+      resource="${resource%%\#*}"
+      extension="${resource##*.}"
+      extension="${extension,,}"
+      case "$extension" in
+        mp3|wav|flac|ogg|oga|opus|m4a|aac|aiff|wma|mid|midi|caf)
+          if (( is_url == 0 )) && command -v termux-media-player >/dev/null 2>&1; then
+            termux-media-player play "$target" && return 0
+          fi
+          if command -v mpv >/dev/null 2>&1; then
+            mpv -- "$target"
+          else
+            __darkhost_media_open "$target"
+          fi
+          ;;
+        jpg|jpeg|png|gif|webp|bmp|heic|heif|avif|tif|tiff)
+          if command -v termux-open >/dev/null 2>&1 || command -v xdg-open >/dev/null 2>&1; then
+            __darkhost_media_open "$target"
+          elif command -v mpv >/dev/null 2>&1; then
+            mpv --force-window=yes -- "$target"
+          else
+            __darkhost_media_open "$target"
+          fi
+          ;;
+        *)
+          if command -v termux-open >/dev/null 2>&1 || command -v xdg-open >/dev/null 2>&1; then
+            __darkhost_media_open "$target"
+          elif command -v mpv >/dev/null 2>&1; then
+            mpv -- "$target"
+          else
+            __darkhost_media_open "$target"
+          fi
+          ;;
+      esac
+      ;;
+    pause|stop|info)
+      if command -v termux-media-player >/dev/null 2>&1; then
+        termux-media-player "$action"
+      else
+        printf 'Playback controls need the Termux:API package and its matching Android app.\n' >&2
+        return 127
+      fi
+      ;;
+    *)
+      printf 'Unknown media action: %s\n' "$action" >&2
+      printf 'Run dh media --help for usage.\n' >&2
+      return 2
+      ;;
+  esac
+}
+
+mp() {
+  __darkhost_media play "$@"
+}
+
 __darkhost_privileged_install() {
   local -a privilege=()
 
@@ -455,6 +548,9 @@ __darkhost_help() {
     "ports|Listening local ports"
     "scan|Local safe diagnostic scan"
     "install|Install packages with the detected package manager"
+    "media|Play or open audio, video, and image files"
+    "play|Open a media file or URL"
+    "suggest|Show suggestions for a command prefix"
     "lock|Lock the Dark Host session"
     "vault|Protected local workspace"
     "logs|Recent Dark Host session logs"
@@ -508,6 +604,8 @@ __darkhost_help() {
 ║  dh doctor     health checks          ║
 ║  dh repair     repair helper          ║
 ║  dh install    install packages       ║
+║  dh media      play/open media        ║
+║  dh suggest    command suggestions    ║
 ║                                      ║
 ║ NETWORK                               ║
 ║  dh network    network status         ║
@@ -559,6 +657,7 @@ __darkhost_unknown_command() {
 }
 
 __darkhost_history() {
+  history -a "$DARKHOST_HISTORY_FILE" 2>/dev/null || true
   if [[ -f "$DARKHOST_HISTORY_FILE" ]]; then
     tail -n 20 "$DARKHOST_HISTORY_FILE" 2>/dev/null || true
   else
@@ -579,77 +678,69 @@ __darkhost_profile() {
 }
 
 __darkhost_settings() {
+  local choice username password theme label mode banner animations
+
   if [[ ! -t 0 ]]; then
     printf 'DARK HOST SETTINGS\n'
     printf 'Username: %s\n' "${DARKHOST_USERNAME:-dark}"
     printf 'Theme: %s\n' "${DARKHOST_THEME:-black}"
     printf 'Prompt: %s\n' "${DARKHOST_LABEL:-dark}"
     printf 'Mode: %s\n' "${DARKHOST_MODE:-normal}"
+    printf 'Banner: %s\n' "${DARKHOST_BANNER:-1}"
     printf 'Recovery: type RESET during login to restore defaults\n'
+    printf 'Configure interactively with: dh settings\n'
     return 0
   fi
 
-  printf '\nDARK HOST SETTINGS\n'
-  printf '[1] Edit username/password\n'
-  printf '[2] Change theme\n'
-  printf '[3] Change mode\n'
-  printf '[4] Toggle startup banner and animations\n'
-  printf '[5] Show current profile\n'
-  printf '[6] Save and exit\n'
-  read -p 'Selection [6]: ' choice
-  choice="${choice:-6}"
+  while true; do
+    printf '\nDARK HOST SETTINGS\n'
+    printf 'User: %s | Theme: %s | Prompt: %s | Mode: %s | Banner: %s\n' \
+      "${DARKHOST_USERNAME:-dark}" "${DARKHOST_THEME:-black}" \
+      "${DARKHOST_LABEL:-dark}" "${DARKHOST_MODE:-normal}" "${DARKHOST_BANNER:-1}"
+    printf '[1] Username and password\n'
+    printf '[2] Theme\n'
+    printf '[3] Mode\n'
+    printf '[4] Prompt label\n'
+    printf '[5] Banner and animations\n'
+    printf '[0] Done\n'
+    read -r -p 'Choose an option [0]: ' choice || return 0
 
-  case "$choice" in
-    1)
-      read -p 'Username ['"${DARKHOST_USERNAME:-dark}"']: ' username
-      username="${username:-${DARKHOST_USERNAME:-dark}}"
-      read -s -p 'Password ['"${DARKHOST_PASSWORD:-darkhost}"']: ' password
-      printf '\n'
-      password="${password:-${DARKHOST_PASSWORD:-darkhost}}"
-      DARKHOST_USERNAME="$username"
-      DARKHOST_PASSWORD="$password"
-      __darkhost_write_config
-      printf 'Credentials updated.\n'
-      ;;
-    2)
-      read -p 'Theme [black/blood/matrix/ghost/void/cyber/terminal] ['"${DARKHOST_THEME:-black}"']: ' theme
-      theme="${theme:-${DARKHOST_THEME:-black}}"
-      DARKHOST_THEME="$theme"
-      __darkhost_write_config
-      printf 'Theme set to %s\n' "$theme"
-      ;;
-    3)
-      read -p 'Mode [normal/hacker/ghost/matrix/forensic/void/minimal] ['"${DARKHOST_MODE:-normal}"']: ' mode
-      mode="${mode:-${DARKHOST_MODE:-normal}}"
-      DARKHOST_MODE="$mode"
-      __darkhost_write_config
-      printf 'Mode set to %s\n' "$mode"
-      ;;
-    4)
-      read -p 'Startup banner [1/0] ['"${DARKHOST_BANNER:-1}"']: ' banner
-      banner="${banner:-${DARKHOST_BANNER:-1}}"
-      if [[ ! "$banner" =~ ^[01]$ ]]; then banner=1; fi
-      read -p 'Animations [1/0] ['"${DARKHOST_ANIMATIONS:-1}"']: ' animations
-      animations="${animations:-${DARKHOST_ANIMATIONS:-1}}"
-      if [[ ! "$animations" =~ ^[01]$ ]]; then animations=1; fi
-      DARKHOST_BANNER="$banner"
-      DARKHOST_ANIMATIONS="$animations"
-      __darkhost_write_config
-      printf 'Banner/animations updated.\n'
-      ;;
-    5)
-      __darkhost_profile
-      ;;
-    *)
-      __darkhost_write_config
-      ;;
-  esac
+    case "${choice:-0}" in
+      1)
+        read -r -p 'Username ['"${DARKHOST_USERNAME:-dark}"']: ' username || return 0
+        read -r -s -p 'Password (leave blank to keep current): ' password || return 0
+        printf '\n'
+        DARKHOST_USERNAME="${username:-${DARKHOST_USERNAME:-dark}}"
+        [[ -n "$password" ]] && DARKHOST_PASSWORD="$password"
+        ;;
+      2)
+        read -r -p 'Theme [black/blood/matrix/ghost/void/cyber/terminal] ['"${DARKHOST_THEME:-black}"']: ' theme || return 0
+        DARKHOST_THEME="${theme:-${DARKHOST_THEME:-black}}"
+        ;;
+      3)
+        read -r -p 'Mode [normal/hacker/ghost/matrix/forensic/void/minimal] ['"${DARKHOST_MODE:-normal}"']: ' mode || return 0
+        DARKHOST_MODE="${mode:-${DARKHOST_MODE:-normal}}"
+        ;;
+      4)
+        read -r -p 'Prompt label ['"${DARKHOST_LABEL:-dark}"']: ' label || return 0
+        DARKHOST_LABEL="${label:-${DARKHOST_LABEL:-dark}}"
+        ;;
+      5)
+        read -r -p 'Startup banner [1/0] ['"${DARKHOST_BANNER:-1}"']: ' banner || return 0
+        read -r -p 'Animations [1/0] ['"${DARKHOST_ANIMATIONS:-1}"']: ' animations || return 0
+        [[ "$banner" =~ ^[01]$ ]] && DARKHOST_BANNER="$banner"
+        [[ "$animations" =~ ^[01]$ ]] && DARKHOST_ANIMATIONS="$animations"
+        ;;
+      0) return 0 ;;
+      *)
+        printf 'Choose 0, 1, 2, 3, 4, or 5.\n'
+        continue
+        ;;
+    esac
 
-  printf '\nUsername: %s\n' "${DARKHOST_USERNAME:-dark}"
-  printf 'Theme: %s\n' "${DARKHOST_THEME:-black}"
-  printf 'Prompt: %s\n' "${DARKHOST_LABEL:-dark}"
-  printf 'Mode: %s\n' "${DARKHOST_MODE:-normal}"
-  printf 'Recovery: type RESET during login to restore defaults\n'
+    __darkhost_write_config
+    printf 'Settings saved.\n'
+  done
 }
 
 __darkhost_theme() {
@@ -691,12 +782,30 @@ __darkhost_mode() {
 }
 
 __darkhost_banner_toggle() {
-  if [[ "${DARKHOST_BANNER:-1}" == "1" ]]; then
-    DARKHOST_BANNER=0
-  else
-    DARKHOST_BANNER=1
-  fi
+  case "${1:-toggle}" in
+    on|1) DARKHOST_BANNER=1 ;;
+    off|0) DARKHOST_BANNER=0 ;;
+    toggle)
+      if [[ "${DARKHOST_BANNER:-1}" == "1" ]]; then
+        DARKHOST_BANNER=0
+      else
+        DARKHOST_BANNER=1
+      fi
+      ;;
+    *)
+      printf 'Usage: dh banner [on|off|toggle]\n' >&2
+      return 2
+      ;;
+  esac
+  __darkhost_write_config
   printf 'Banner set to %s\n' "$DARKHOST_BANNER"
+}
+
+__darkhost_startup_banner() {
+  [[ "${DARKHOST_STARTUP:-1}" == "1" && "${DARKHOST_BANNER:-1}" == "1" ]] || return 0
+  printf '\n[DARK CORE]\n'
+  printf '[✓] USER\n[✓] STORAGE\n[✓] NETWORK\n[✓] TERMINAL\n[✓] COMMAND ENGINE\n[✓] SUGGESTION ENGINE\n[✓] EVENT ENGINE\n\n'
+  printf 'DARK HOST READY.\n\n'
 }
 
 __darkhost_lock() {
@@ -861,49 +970,104 @@ __darkhost_paste() {
 }
 
 __darkhost_suggest() {
-  local cmd="${1:-}"
-  local suggestions=(
-    'dh help' 'dh status' 'dh system' 'dh user' 'dh network' 'dh memory'
-    'dh storage' 'dh processes' 'dh scan' 'dh tools' 'dh theme' 'dh settings'
-    'dh update' 'dh version' 'dh about' 'dh logout' 'dh lock' 'dh clear'
-    'dh monitor' 'dh ping' 'dh ports' 'dh battery' 'dh wifi' 'dh device'
-    'dh uptime' 'dh logs' 'dh security' 'dh sessions' 'dh vault' 'dh doctor'
-    'dh repair' 'dh mode' 'dh alias' 'dh plugin' 'dh ghost' 'dh void' 'dh 404'
-    'dh shadow' 'dh root' 'ls' 'cd' 'pwd' 'cp' 'mv' 'rm' 'mkdir' 'git' 'ssh' 'python' 'node' 'npm'
+  local input="${1:-}"
+  local current_word suggestion candidate count=0
+  local -a suggestions=(
+    help status system user profile network memory storage processes scan install media play
+    tools theme settings update version about logout lock pause resume clear dashboard matrix
+    hacker banner mode history vault monitor ping ports battery wifi device uptime logs sessions
+    security alias plugin doctor repair ghost void 404 shadow root
+    ls cd pwd cp mv rm mkdir git ssh python node npm
   )
 
-  if [[ -z "$cmd" ]]; then
+  if [[ -z "$input" ]]; then
     return 0
   fi
 
+  if [[ "$input" == "dh "* ]]; then
+    current_word="${input##* }"
+    if [[ "$input" == "dh theme "* ]]; then
+      suggestions=(black blood matrix ghost void cyber terminal)
+      current_word="${input##* }"
+    elif [[ "$input" == "dh mode "* ]]; then
+      suggestions=(normal hacker ghost matrix forensic void minimal)
+      current_word="${input##* }"
+    elif [[ "$input" == "dh banner "* ]]; then
+      suggestions=(on off toggle)
+      current_word="${input##* }"
+    fi
+    printf '\nSuggestions for %s:\n' "$input"
+    for suggestion in "${suggestions[@]}"; do
+      if [[ "$suggestion" == "$current_word"* ]]; then
+        printf '  dh %s\n' "$suggestion"
+        count=$((count + 1))
+        (( count >= 12 )) && break
+      fi
+    done
+    return 0
+  fi
+
+  if [[ "$input" == "dh" ]]; then
+    printf '\nSuggestions for dh:\n'
+    for suggestion in "${suggestions[@]}"; do
+      [[ "$suggestion" == ls || "$suggestion" == cd || "$suggestion" == git ]] && continue
+      printf '  dh %s\n' "$suggestion"
+      count=$((count + 1))
+      (( count >= 12 )) && break
+    done
+    return 0
+  fi
+
+  if [[ "$input" == dh* ]]; then
+    current_word="$input"
+  else
+    current_word="${input##* }"
+    [[ "$input" == *' ' ]] && return 0
+  fi
   printf '\nSuggestions\n'
-  local match
-  for match in "${suggestions[@]}"; do
-    if [[ "$match" == "$cmd"* ]]; then
-      printf '  %s\n' "$match"
+  for candidate in "${suggestions[@]}"; do
+    if [[ "$candidate" == "$current_word"* ]]; then
+      printf '  %s\n' "$candidate"
+      count=$((count + 1))
+      (( count >= 12 )) && break
     fi
   done
 }
 
+__darkhost_readline_suggest() {
+  __darkhost_suggest "${READLINE_LINE:-}"
+}
+
 __darkhost_complete() {
-  local cur="${COMP_WORDS[COMP_CWORD]}"
-  local suggestions=(
-    'dh' 'dh help' 'dh status' 'dh system' 'dh user' 'dh network' 'dh memory' 'dh storage'
-    'dh processes' 'dh scan' 'dh install' 'dh tools' 'dh theme' 'dh settings' 'dh update' 'dh version'
-    'dh about' 'dh logout' 'dh lock' 'dh clear' 'dh monitor' 'dh ping' 'dh ports' 'dh battery'
-    'dh wifi' 'dh device' 'dh uptime' 'dh logs' 'dh security' 'dh sessions' 'dh vault' 'dh doctor'
-    'dh repair' 'dh mode' 'dh alias' 'dh plugin' 'dh ghost' 'dh void' 'dh 404' 'dh shadow' 'dh root'
-    'ls' 'cd' 'pwd' 'cp' 'mv' 'rm' 'mkdir' 'git' 'ssh' 'python' 'node' 'npm'
+  local current_word="${COMP_WORDS[COMP_CWORD]:-}"
+  local subcommand="${COMP_WORDS[1]:-}"
+  local -a commands=(
+    help status system user profile network memory storage processes scan install media play mp tools suggest
+    theme settings update version about logout lock pause resume clear dashboard matrix
+    hacker banner mode history vault monitor ping ports battery wifi device uptime logs
+    sessions security alias plugin doctor repair ghost void 404 shadow root
   )
+  local -a choices=()
 
-  local matches=()
-  for item in "${suggestions[@]}"; do
-    if [[ "$item" == "$cur"* ]]; then
-      matches+=("$item")
-    fi
-  done
+  case "$subcommand" in
+    help) choices=("${commands[@]}") ;;
+    theme) choices=(black blood matrix ghost void cyber terminal) ;;
+    mode) choices=(normal hacker ghost matrix forensic void minimal) ;;
+    banner) choices=(on off toggle) ;;
+    media) choices=(play pause stop info help) ;;
+    *)
+      if (( COMP_CWORD == 1 )); then
+        choices=("${commands[@]}")
+      fi
+      ;;
+  esac
 
-  COMPREPLY=("${matches[@]}")
+  COMPREPLY=( $(compgen -W "${choices[*]}" -- "$current_word") )
+}
+
+__darkhost_before_prompt() {
+  history -a "$DARKHOST_HISTORY_FILE" 2>/dev/null || true
+  __darkhost_prompt
 }
 
 __darkhost_init() {
@@ -922,16 +1086,16 @@ __darkhost_init() {
     bind -x '"\C-h": __darkhost_help'
     bind -x '"\C-x": __darkhost_lock'
     bind -x '"\C-p": __darkhost_paste'
+    bind -x '"\ev": __darkhost_paste'
+    bind -x '"\eV": __darkhost_paste'
+    bind -x '"\C-@": __darkhost_readline_suggest'
     complete -F __darkhost_complete dh
+    complete -o default mp
   fi
 
-  PROMPT_COMMAND='history -a; __darkhost_prompt'
+  PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND}; }__darkhost_before_prompt"
   __darkhost_prompt
-  if [[ "${DARKHOST_STARTUP:-1}" == "1" ]]; then
-    printf '\n[DARK CORE]\n'
-    printf '[✓] USER\n[✓] STORAGE\n[✓] NETWORK\n[✓] TERMINAL\n[✓] COMMAND ENGINE\n[✓] SUGGESTION ENGINE\n[✓] EVENT ENGINE\n\n'
-    printf 'DARK HOST READY.\n\n'
-  fi
+  __darkhost_startup_banner
   __darkhost_login
 }
 
@@ -958,6 +1122,9 @@ dh() {
     processes) __darkhost_processes ;;
     scan) __darkhost_scan ;;
     install) shift; __darkhost_install "$@" ;;
+    media) shift; __darkhost_media "$@" ;;
+    play) shift; __darkhost_media play "$@" ;;
+    suggest) shift; __darkhost_suggest "$*" ;;
     tools) printf 'pkg apt git python node npm ssh\n' ;;
     theme) __darkhost_theme "${2:-}" ;;
     settings) __darkhost_settings ;;
@@ -972,7 +1139,7 @@ dh() {
     center|dashboard|main) __darkhost_dashboard ;;
     matrix) __darkhost_matrix_fail ;;
     hacker) __darkhost_mode 2 ;;
-    banner) __darkhost_banner_toggle ;;
+    banner) shift; __darkhost_banner_toggle "${1:-toggle}" ;;
     mode) __darkhost_mode "${2:-}" ;;
     history) __darkhost_history ;;
     vault) __darkhost_vault ;;

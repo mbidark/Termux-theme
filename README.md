@@ -37,13 +37,17 @@ If the installer runs without an interactive terminal, it creates the default pr
 | Area | Commands |
 | --- | --- |
 | Overview | `dh`, `dh status`, `dh system`, `dh user`, `dh version`, `dh about` |
-| Device | `dh memory`, `dh storage`, `dh processes`, `dh battery`, `dh uptime`, `dh monitor` |
+| Device | `dh memory`, `dh storage`, `dh processes`, `dh battery`, `dh uptime`, `dh monitor`, `dh media` |
 | Network | `dh network`, `dh wifi`, `dh ping`, `dh ports`, `dh scan` |
 | Workspace | `dh theme`, `dh mode`, `dh banner`, `dh settings`, `dh alias`, `dh plugin` |
 | Session | `dh lock`, `dh logout`, `dh pause`, `dh resume`, `dh history`, `dh logs` |
 | Maintenance | `dh install <package>`, `dh doctor`, `dh repair`, `dh update`, `dh help` |
 
-Get the full list with `dh help`; get details on a command with `dh help <command>`.
+Get the full list with `dh help`; get details on a command with `dh help <command>`. Press Tab after `dh` to complete commands, Ctrl+Space to show word suggestions for the current command line, and use the arrow keys to search command history. Paste clipboard text with Alt+V, Alt+Shift+V, or Ctrl+P.
+
+Open local media or a URL with the short command `mp <file-or-url>`, or use `dh media play <file-or-url>`. Bash filename completion works with `mp` for local files. Audio uses Termux:API when available, otherwise Dark Host tries `mpv` or the system opener. Video and pictures open in the Android or desktop app associated with that file type, with `mpv` as a fallback. `dh media pause`, `stop`, and `info` use Termux:API controls.
+
+For Termux playback controls, install the `termux-api` package and its matching Termux:API Android app. `mpv` can be installed as an optional player with `dh install mpv`. Playback depends on the installed app and codecs; no single player supports literally every format.
 
 Install packages with the detected system package manager:
 
@@ -55,7 +59,7 @@ Dark Host detects Termux `pkg`, Debian/Ubuntu `apt-get`, Fedora `dnf`/`yum`, Arc
 
 ## Make It Yours
 
-Run `dh settings` to update your local credentials, theme, mode, banner, and animation preferences. The selected theme and prompt configuration are stored under `~/.darkhost/`.
+Run `dh settings` for a menu that stays open while you change credentials, theme, mode, prompt label, banner, and animation preferences. Each change is saved immediately. Use `dh banner on` or `dh banner off` to control the startup banner directly. Settings are stored under `~/.darkhost/`.
 
 Available themes include `black`, `blood`, `matrix`, `ghost`, `void`, `cyber`, and `terminal`. Modes include `normal`, `hacker`, `ghost`, `matrix`, `forensic`, `void`, and `minimal`.
 
