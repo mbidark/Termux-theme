@@ -1,60 +1,64 @@
-# DARK HOST Termux Theme
+# DARK HOST — Termux Hacker Theme
 
-A minimal, dark, hacker-style theme for Termux.
+A minimal hacker-style green Termux theme.
 
 ## Features
 
+- Hacker green terminal
 - DARK HOST startup banner
-- Custom two-line terminal prompt
-- Dark color palette
-- Hidden Termux extra-key / shortcut bar
-- Useful aliases
-- Automatic configuration backups
-- Simple uninstall / restore script
+- Custom two-line prompt
+- Black/green terminal palette
+- Hidden Termux extra-key row
+- Automatic configuration backup
+- One-command GitHub update
+- Uninstall / restore support
 
 ## Install
 
-Clone the repository:
-
 ```bash
-git clone https://github.com/YOUR_USERNAME/dark-host-termux.git
-cd dark-host-termux
-chmod +x install.sh uninstall.sh
+pkg install git -y
+git clone https://github.com/mbidark/Termux-theme.git
+cd Termux-theme
+chmod +x *.sh
 ./install.sh
 ```
 
-Restart Termux, or run:
+## Update
+
+After a new version is pushed to GitHub:
 
 ```bash
-source ~/.bashrc
+cd ~/Termux-theme
+./update.sh
+```
+
+Or:
+
+```bash
+git pull
+./install.sh
 ```
 
 ## Uninstall
-
-From the project directory:
 
 ```bash
 ./uninstall.sh
 ```
 
-The installer stores backups in:
+## Project structure
+
+Everything is kept in the root directory:
 
 ```text
-~/.dark-host-backup
-```
-
-## Files
-
-```text
-dark-host-termux/
+Termux-theme/
+├── bashrc
+├── colors.properties
+├── termux.properties
 ├── install.sh
+├── update.sh
 ├── uninstall.sh
 ├── README.md
-├── LICENSE
-└── config/
-    ├── bashrc
-    ├── colors.properties
-    └── termux.properties
+└── LICENSE
 ```
 
 ## License
