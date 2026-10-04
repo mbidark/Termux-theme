@@ -2,6 +2,7 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+DARKHOST_VERSION="$(tr -d '\r\n' < "$ROOT/VERSION")"
 T="$HOME/.termux"
 B="$HOME/.dark-backup"
 CONFIG_FILE="$HOME/.darkhost/config/darkhost.conf"
@@ -10,7 +11,7 @@ is_upgrade=0
 
 __darkhost_setup_wizard() {
   if [[ ! -t 0 ]]; then
-    cat > "$CONFIG_FILE" <<'EOF'
+    cat > "$CONFIG_FILE" <<EOF
 DARKHOST_USERNAME="dark"
 DARKHOST_PASSWORD="darkhost"
 DARKHOST_THEME="black"
@@ -21,7 +22,7 @@ DARKHOST_HACKER=0
 DARKHOST_LOGIN_MODE="secure"
 DARKHOST_ANIMATIONS=1
 DARKHOST_MODE="normal"
-DARKHOST_VERSION="2.0.0"
+DARKHOST_VERSION="$DARKHOST_VERSION"
 EOF
     printf '%s\n' "dark" > "$HOME/.darkhost/username" 2>/dev/null || true
     printf '%s\n' "darkhost" > "$HOME/.darkhost/password" 2>/dev/null || true
@@ -59,7 +60,7 @@ DARKHOST_HACKER=0
 DARKHOST_LOGIN_MODE="secure"
 DARKHOST_ANIMATIONS=${animations}
 DARKHOST_MODE="${mode}"
-DARKHOST_VERSION="2.0.0"
+DARKHOST_VERSION="$DARKHOST_VERSION"
 EOF
 
   printf '%s\n' "$username" > "$HOME/.darkhost/username" 2>/dev/null || true
@@ -98,6 +99,7 @@ if (( is_upgrade == 0 )); then
   cp "$ROOT/termux.properties" "$T/termux.properties"
 fi
 cp "$ROOT/darkhost.sh" "$HOME/.darkhost/darkhost.sh"
+cp "$ROOT/VERSION" "$HOME/.darkhost/VERSION"
 chmod +x "$HOME/.darkhost/darkhost.sh"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then

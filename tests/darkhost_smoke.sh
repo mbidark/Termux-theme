@@ -55,10 +55,40 @@ preserved=1
 grep -q USER_BASHRC_PRESERVE_PROBE "$preserve_home/.bashrc" || preserved=0
 grep -q USER_PROFILE_PRESERVE_PROBE "$preserve_home/.profile" || preserved=0
 grep -q USER_TERMUX_PRESERVE_PROBE "$preserve_home/.termux/termux.properties" || preserved=0
+grep -q 'DARKHOST_VERSION="2.0.2"' "$preserve_home/.darkhost/config/darkhost.conf" || preserved=0
+grep -q '^2.0.2$' "$preserve_home/.darkhost/VERSION" || preserved=0
 [[ "$upgrade_output" != *$'\033c'* ]] || preserved=0
 rm -rf "$preserve_home"
 if (( preserved == 0 )); then
   echo "FAIL: update install overwrote user files or reset the terminal" >&2
+  exit 1
+fi
+
+version_home="$(mktemp -d)"
+(
+  DARKHOST_DIR="$version_home/.darkhost"
+  DARKHOST_CONFIG_DIR="$DARKHOST_DIR/config"
+  DARKHOST_CONFIG_FILE="$DARKHOST_CONFIG_DIR/darkhost.conf"
+  DARKHOST_HISTORY_FILE="$DARKHOST_DIR/history/history"
+  DARKHOST_LOG_DIR="$DARKHOST_DIR/logs"
+  DARKHOST_LOG_FILE="$DARKHOST_LOG_DIR/session.log"
+  DARKHOST_VAULT_DIR="$DARKHOST_DIR/vault"
+  DARKHOST_SESSIONS_DIR="$DARKHOST_DIR/sessions"
+  DARKHOST_THEMES_DIR="$DARKHOST_DIR/themes"
+  DARKHOST_PLUGINS_DIR="$DARKHOST_DIR/plugins"
+  DARKHOST_PROFILES_DIR="$DARKHOST_DIR/profiles"
+  DARKHOST_BACKUPS_DIR="$DARKHOST_DIR/backups"
+  DARKHOST_USER_FILE="$DARKHOST_DIR/username"
+  DARKHOST_PASS_FILE="$DARKHOST_DIR/password"
+  mkdir -p "$DARKHOST_CONFIG_DIR"
+  printf 'DARKHOST_VERSION="2.0.0"\n' > "$DARKHOST_CONFIG_FILE"
+  __darkhost_load_config
+  [[ "$DARKHOST_VERSION" == "2.0.2" ]]
+)
+version_load_status=$?
+rm -rf "$version_home"
+if (( version_load_status != 0 )); then
+  echo "FAIL: stale config overrode the installed release version" >&2
   exit 1
 fi
 
@@ -123,6 +153,8 @@ status_output="$(dh status)"
 dashboard_output="$(dh)"
 system_output="$(dh system)"
 if [[ "$status_output" != *"DARK HOST  /  STATUS"* || "$status_output" != *"WORKING DIR"* || \
+  "$status_output" != *"VERSION"* || "$status_output" != *"2.0.2"* || \
+  "$(dh version)" != *"2.0.2"* || \
     "$dashboard_output" != *"RESOURCE SNAPSHOT"* && "$dashboard_output" != *"RESOURCES"* || \
     "$dashboard_output" != *"PROFILE"* || "$system_output" != *"PLATFORM"* ]]; then
   echo "FAIL: status, dashboard, or system details were incomplete" >&2
@@ -224,12 +256,22 @@ fi
 rm -f "$update_error_file"
 update_root="$(mktemp -d)"
 update_repo="$update_root/checkout with spaces"
+update_origin="$update_root/origin.git"
 mkdir -p "$update_repo"
-git -C "$update_repo" init --quiet
+git init --quiet --bare --initial-branch=main "$update_origin"
+git -C "$update_repo" init --quiet --initial-branch=main
+git -C "$update_repo" config user.name 'Dark Host Tests'
+git -C "$update_repo" config user.email 'darkhost-tests@example.invalid'
+printf '2.0.2\n' > "$update_repo/VERSION"
 printf '%s\n' '#!/usr/bin/env bash' 'printf "MOCK UPDATE EXECUTED\\n"' > "$update_repo/update.sh"
+git -C "$update_repo" add VERSION update.sh
+git -C "$update_repo" commit --quiet -m 'Add updater fixture'
+git -C "$update_repo" remote add origin "$update_origin"
+git -C "$update_repo" push --quiet origin main
 update_output="$(dh update --yes "$update_repo")"
 rm -rf "$update_root"
-if [[ "$update_output" != *"Checkout: $update_repo"* || "$update_output" != *"MOCK UPDATE EXECUTED"* ]]; then
+if [[ "$update_output" != *"Checkout: $update_repo"* || "$update_output" != *"Available version: 2.0.2"* || \
+  "$update_output" != *"Update source: origin/main"* || "$update_output" != *"MOCK UPDATE EXECUTED"* ]]; then
   echo "FAIL: dh update did not run the updater from the selected checkout path" >&2
   exit 1
 fi

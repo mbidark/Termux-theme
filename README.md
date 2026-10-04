@@ -43,6 +43,8 @@ If the installer runs without an interactive terminal, it creates the default pr
 | Session | `dh lock`, `dh logout`, `dh pause`, `dh resume`, `dh history`, `dh logs` |
 | Maintenance | `dh install <package>`, `dh doctor`, `dh repair`, `dh update`, `dh help` |
 
+Current release: `2.0.2` (`dh version`). The release is also shown by `dh status`.
+
 Get the full list with `dh help`; get details on a command with `dh help <command>`. Press Tab after `dh` to complete commands, or Ctrl+Space to print matching suggestions for the current command line. Use the arrow keys to search command history. Paste clipboard text with Alt+V, Alt+Shift+V, or Ctrl+P.
 
 Play a local file or URL with `mp <file-or-url>`, or search by title with `mp <search terms>` (for example, `mp lofi beats`). Quote paths that contain spaces. `mpv` handles stream URLs when installed; images open in the associated Android or desktop app. Local audio uses Termux:API when available, then falls back to `mpv` or the system opener. Install `mpv` for stream playback:
@@ -97,7 +99,7 @@ For non-interactive use, pass an explicit path and confirmation flag:
 dh update --yes "$HOME/Dark"
 ```
 
-The updater uses `git pull --ff-only` and refreshes the Dark Host engine. It stops if the checkout cannot be updated as a fast-forward, preserves your existing Bash and Termux settings, and skips the setup wizard during upgrades.
+The updater detects the repository's default branch from `origin`, displays the installed and available release versions, and uses a fast-forward-only pull. It preserves your existing Bash and Termux settings and skips the setup wizard during upgrades.
 
 To remove the shell layer and restore backed-up startup files:
 

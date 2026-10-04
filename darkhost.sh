@@ -7,6 +7,13 @@ if [[ -n "${DARKHOST_LOADED:-}" ]]; then
 fi
 DARKHOST_LOADED=1
 
+DARKHOST_SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DARKHOST_VERSION_FILE="$DARKHOST_SOURCE_DIR/VERSION"
+DARKHOST_VERSION="unknown"
+if [[ -r "$DARKHOST_VERSION_FILE" ]]; then
+  IFS= read -r DARKHOST_VERSION < "$DARKHOST_VERSION_FILE"
+fi
+
 DARKHOST_DIR="${DARKHOST_DIR:-$HOME/.darkhost}"
 DARKHOST_CONFIG_DIR="$DARKHOST_DIR/config"
 DARKHOST_CONFIG_FILE="$DARKHOST_CONFIG_DIR/darkhost.conf"
@@ -56,7 +63,7 @@ DARKHOST_HACKER=${DARKHOST_HACKER:-0}
 DARKHOST_LOGIN_MODE="${DARKHOST_LOGIN_MODE:-secure}"
 DARKHOST_ANIMATIONS=${DARKHOST_ANIMATIONS:-1}
 DARKHOST_MODE="${DARKHOST_MODE:-normal}"
-DARKHOST_VERSION="2.0.0"
+DARKHOST_VERSION="${DARKHOST_VERSION:-unknown}"
 CFG
   printf '%s\n' "${DARKHOST_USERNAME:-dark}" > "$DARKHOST_USER_FILE" 2>/dev/null || true
   printf '%s\n' "${DARKHOST_PASSWORD:-darkhost}" > "$DARKHOST_PASS_FILE" 2>/dev/null || true
@@ -126,6 +133,9 @@ __darkhost_load_config() {
 
   # shellcheck disable=SC1090
   source "$DARKHOST_CONFIG_FILE"
+  if [[ -r "$DARKHOST_VERSION_FILE" ]]; then
+    IFS= read -r DARKHOST_VERSION < "$DARKHOST_VERSION_FILE"
+  fi
 
   if [[ -f "$DARKHOST_USER_FILE" ]]; then
     DARKHOST_USERNAME="$(tr -d '\r\n' < "$DARKHOST_USER_FILE" 2>/dev/null || printf '%s' "${DARKHOST_USERNAME:-dark}")"
@@ -155,6 +165,7 @@ DARKHOST_HACKER=0
 DARKHOST_LOGIN_MODE="secure"
 DARKHOST_ANIMATIONS=1
 DARKHOST_MODE="normal"
+DARKHOST_VERSION="${DARKHOST_VERSION:-unknown}"
 CFG
 }
 
@@ -320,6 +331,7 @@ __darkhost_status() {
   printf 'DARK HOST  /  STATUS\n'
   printf '%-14s %s\n' 'USER' "${DARKHOST_USERNAME:-dark}" 'HOST' "$host"
   printf '%-14s %s\n' 'UPTIME' "$uptime_value" 'SHELL' "Bash ${BASH_VERSION%%(*}"
+  printf '%-14s %s\n' 'VERSION' "${DARKHOST_VERSION:-unknown}"
   printf '%-14s %s\n' 'THEME' "${DARKHOST_THEME:-black}" 'MODE' "${DARKHOST_MODE:-normal}"
   printf '%-14s %s\n' 'STARTUP BANNER' "$banner_state" 'WORKING DIR' "$(__darkhost_prompt_path)"
 }
@@ -605,6 +617,7 @@ __darkhost_dashboard() {
   printf '\n%bRESOURCES%b\n' "$color" "$reset"
   printf '  %-14s %s\n' 'CPU SAMPLE' "$cpu" 'MEMORY' "$ram" 'HOME DISK' "$disk"
   printf '\n%bPROFILE%b\n' "$color" "$reset"
+  printf '  %-14s %s\n' 'VERSION' "${DARKHOST_VERSION:-unknown}"
   printf '  %-14s %s\n' 'THEME' "${DARKHOST_THEME:-black}" 'MODE' "${DARKHOST_MODE:-normal}"
   printf '\n  dh help   Browse commands\n  dh status View session details\n\n'
 }
@@ -1059,11 +1072,11 @@ __darkhost_repair() {
 }
 
 __darkhost_update() {
-  local repo_path="${DARKHOST_REPO:-$HOME/Dark}" selection='' answer='' branch='' assume_yes=0
+  local repo_path="${DARKHOST_REPO:-$HOME/Dark}" selection='' answer='' branch='' remote_branch='' available_version='' assume_yes=0
 
   if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     printf 'Usage: dh update [--yes] [checkout-path]\n'
-    printf 'Prompts for a checkout path and confirmation, then pulls and reinstalls Dark Host.\n'
+    printf 'Checks the origin default branch for a release, then prompts before updating.\n'
     return 0
   fi
   if [[ "${1:-}" == "--yes" ]]; then
@@ -1099,9 +1112,30 @@ __darkhost_update() {
     printf 'No update.sh found in: %s\n' "$repo_path" >&2
     return 2
   fi
+  if ! git -C "$repo_path" remote get-url origin >/dev/null 2>&1; then
+    printf 'No origin remote configured for: %s\n' "$repo_path" >&2
+    return 2
+  fi
   branch="$(git -C "$repo_path" branch --show-current 2>/dev/null || true)"
   branch="${branch:-detached HEAD}"
-  printf '\nCheckout: %s\nBranch:   %s\n' "$repo_path" "$branch"
+  remote_branch="$(git -C "$repo_path" ls-remote --symref origin HEAD 2>/dev/null | awk '$1 == "ref:" && $3 == "HEAD" {sub("refs/heads/", "", $2); print $2; exit}')"
+  remote_branch="${remote_branch:-$branch}"
+  if [[ "$remote_branch" == "detached HEAD" ]] || ! git -C "$repo_path" fetch --quiet origin "$remote_branch"; then
+    printf 'Could not fetch the origin default branch to check for updates.\n' >&2
+    return 1
+  fi
+  available_version="$(git -C "$repo_path" show FETCH_HEAD:VERSION 2>/dev/null | head -n 1)"
+  if [[ -z "$available_version" ]]; then
+    printf 'No VERSION file found on origin/%s.\n' "$remote_branch" >&2
+    return 1
+  fi
+  printf '\nCheckout: %s\nLocal branch: %s\nUpdate source: origin/%s\n' "$repo_path" "$branch" "$remote_branch"
+  printf 'Installed version: %s\nAvailable version: %s\n' "${DARKHOST_VERSION:-unknown}" "$available_version"
+  if [[ "${DARKHOST_VERSION:-unknown}" == "$available_version" ]]; then
+    printf 'Version matches; checking out the latest commit and refreshing the install.\n'
+  else
+    printf 'A different release is available.\n'
+  fi
 
   if (( assume_yes == 0 )); then
     read -r -p 'Pull fast-forward updates and reinstall? [y/N]: ' answer || return 1
@@ -1116,7 +1150,7 @@ __darkhost_update() {
 }
 
 __darkhost_version() {
-  printf 'DARK HOST VERSION 2.0.0\n'
+  printf 'DARK HOST VERSION %s\n' "${DARKHOST_VERSION:-unknown}"
 }
 
 __darkhost_about() {
