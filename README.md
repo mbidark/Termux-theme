@@ -77,6 +77,14 @@ Available themes include `black`, `blood`, `matrix`, `ghost`, `void`, `cyber`, a
 
 ## Update or Remove
 
+If your installed `dh update` still prints the old `Current version` / `Available` menu, it cannot apply the update because that menu does not read input. From the repository checkout, bootstrap the new updater directly, then fully close and reopen Termux:
+
+```bash
+cd "$HOME/Dark" && git pull --ff-only origin main && DARKHOST_UPDATE=1 bash ./install.sh
+```
+
+Replace `"$HOME/Dark"` with your checkout path if you installed it elsewhere.
+
 Run `dh update` from an interactive terminal to choose the Git checkout path (default: `~/Dark`) and confirm the update. It shows the selected branch before proceeding and leaves the terminal screen intact:
 
 ```bash
