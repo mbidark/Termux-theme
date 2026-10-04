@@ -45,7 +45,19 @@ If the installer runs without an interactive terminal, it creates the default pr
 
 Get the full list with `dh help`; get details on a command with `dh help <command>`. Press Tab after `dh` to complete commands, or Ctrl+Space to print matching suggestions for the current command line. Use the arrow keys to search command history. Paste clipboard text with Alt+V, Alt+Shift+V, or Ctrl+P.
 
-Play a local file or URL with `mp <file-or-url>`, or search by title with `mp <search terms>` (for example, `mp lofi beats`). Quote paths that contain spaces. `mpv` handles stream URLs when installed; images open in the associated Android or desktop app. Local audio uses Termux:API when available, then falls back to `mpv` or the system opener. Name searches require both `yt-dlp` and `mpv`; install them with `dh install yt-dlp mpv`. `dh media pause`, `stop`, and `info` use Termux:API controls.
+Play a local file or URL with `mp <file-or-url>`, or search by title with `mp <search terms>` (for example, `mp lofi beats`). Quote paths that contain spaces. `mpv` handles stream URLs when installed; images open in the associated Android or desktop app. Local audio uses Termux:API when available, then falls back to `mpv` or the system opener. Install `mpv` for stream playback:
+
+```bash
+dh install mpv
+```
+
+Title searches require both `yt-dlp` and `mpv`:
+
+```bash
+dh install yt-dlp mpv
+```
+
+`dh media pause`, `stop`, and `info` use Termux:API controls.
 
 For Termux playback controls, install the `termux-api` package and its matching Termux:API Android app. Playback depends on the installed app and codecs; no single player supports every format.
 
@@ -65,7 +77,13 @@ Available themes include `black`, `blood`, `matrix`, `ghost`, `void`, `cyber`, a
 
 ## Update or Remove
 
-Run `dh update` from an interactive terminal to choose the Git checkout path (default: `~/Dark`) and confirm the update. It shows the selected branch before proceeding and leaves the terminal screen intact. To run non-interactively, pass an explicit path and confirmation flag:
+Run `dh update` from an interactive terminal to choose the Git checkout path (default: `~/Dark`) and confirm the update. It shows the selected branch before proceeding and leaves the terminal screen intact:
+
+```bash
+dh update
+```
+
+For non-interactive use, pass an explicit path and confirmation flag:
 
 ```bash
 dh update --yes "$HOME/Dark"
