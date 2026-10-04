@@ -26,6 +26,7 @@ DARKHOST_THEMES_DIR="$DARKHOST_DIR/themes"
 DARKHOST_PLUGINS_DIR="$DARKHOST_DIR/plugins"
 DARKHOST_PROFILES_DIR="$DARKHOST_DIR/profiles"
 DARKHOST_BACKUPS_DIR="$DARKHOST_DIR/backups"
+DARKHOST_SERVERS_DIR="$DARKHOST_DIR/servers"
 DARKHOST_USER_FILE="$DARKHOST_DIR/username"
 DARKHOST_PASS_FILE="$DARKHOST_DIR/password"
 
@@ -45,6 +46,7 @@ __darkhost_ensure_layout() {
     "$DARKHOST_PLUGINS_DIR" \
     "$DARKHOST_PROFILES_DIR" \
     "$DARKHOST_BACKUPS_DIR" \
+    "$DARKHOST_SERVERS_DIR" \
     "$(dirname "$DARKHOST_HISTORY_FILE")"
 
   touch "$DARKHOST_HISTORY_FILE" 2>/dev/null || true
@@ -280,8 +282,8 @@ __darkhost_git_tag() {
 __darkhost_apply_theme() {
   case "${DARKHOST_THEME:-black}" in
     black)
-      DARKHOST_PRIMARY='\033[38;5;245m'
-      DARKHOST_ACCENT='\033[38;5;196m'
+      DARKHOST_PRIMARY='\033[38;5;81m'
+      DARKHOST_ACCENT='\033[38;5;49m'
       DARKHOST_TEXT='\033[38;5;255m'
       ;;
     blood)
@@ -339,8 +341,12 @@ __darkhost_status() {
 __darkhost_system() {
   local device android_release os_info
   os_info="$(uname -srm 2>/dev/null || printf 'unavailable')"
-  device="$(getprop ro.product.model 2>/dev/null || true)"
-  android_release="$(getprop ro.build.version.release 2>/dev/null || true)"
+  device=''
+  android_release=''
+  if command -v getprop >/dev/null 2>&1; then
+    device="$(getprop ro.product.model 2>/dev/null || true)"
+    android_release="$(getprop ro.build.version.release 2>/dev/null || true)"
+  fi
   [[ -n "$device" ]] || device="not reported by this system"
   [[ -n "$android_release" ]] || android_release="not Android"
 
@@ -523,6 +529,341 @@ mp() {
   __darkhost_media play "$@"
 }
 
+__darkhost_open_url() {
+  local url="${1:-}"
+  [[ -n "$url" ]] || { printf 'Usage: dh browse <https://url>\n' >&2; return 2; }
+  case "$url" in
+    http://*|https://*) ;;
+    *)
+      printf 'Only http:// and https:// URLs can be opened.\n' >&2
+      return 2
+      ;;
+  esac
+
+  if command -v termux-open-url >/dev/null 2>&1; then
+    termux-open-url "$url"
+  elif command -v termux-open >/dev/null 2>&1; then
+    termux-open "$url"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url"
+  else
+    printf 'No browser launcher found. Install Termux:API tools or xdg-utils.\n' >&2
+    return 127
+  fi
+}
+
+__darkhost_browse() {
+  local url="${1:-}"
+  [[ -n "$url" ]] || { printf 'Usage: dh browse <url>\n' >&2; return 2; }
+  case "$url" in
+    http://*|https://*) ;;
+    *://*)
+      printf 'Only http:// and https:// URLs can be opened.\n' >&2
+      return 2
+      ;;
+    *:*)
+      if [[ "$url" =~ ^[[:alnum:].-]+:[0-9]+(/.*)?$ ]]; then
+        url="https://$url"
+      else
+        printf 'Only http:// and https:// URLs can be opened.\n' >&2
+        return 2
+      fi
+      ;;
+    *) url="https://$url" ;;
+  esac
+  __darkhost_open_url "$url"
+}
+
+__darkhost_open() {
+  local target="${1:-}"
+  [[ -n "$target" ]] || { printf 'Usage: dh open <file-or-url>\n' >&2; return 2; }
+  if [[ "$target" == http://* || "$target" == https://* ]]; then
+    __darkhost_open_url "$target"
+    return $?
+  fi
+  if [[ ! -e "$target" ]]; then
+    printf 'File or directory not found: %s\n' "$target" >&2
+    return 2
+  fi
+  if command -v termux-open >/dev/null 2>&1; then
+    termux-open "$target"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$target"
+  else
+    printf 'No file opener found. Install Termux:API tools or xdg-utils.\n' >&2
+    return 127
+  fi
+}
+
+__darkhost_files() {
+  local target="${1:-.}"
+  if [[ ! -e "$target" ]]; then
+    printf 'Path not found: %s\n' "$target" >&2
+    return 2
+  fi
+  if command -v eza >/dev/null 2>&1; then
+    eza --icons=auto --group-directories-first -lah -- "$target"
+  else
+    ls -lahF -- "$target"
+  fi
+}
+
+__darkhost_valid_port() {
+  local port="${1:-}"
+  [[ "$port" =~ ^[0-9]{1,5}$ ]] || return 1
+  (( 10#$port >= 1 && 10#$port <= 65535 ))
+}
+
+__darkhost_process_args() {
+  local pid="${1:-}"
+  if [[ -r "/proc/$pid/cmdline" ]]; then
+    tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null
+  else
+    ps -p "$pid" -o args= 2>/dev/null
+  fi
+}
+
+__darkhost_server_matches_record() {
+  local port="${1:-}" pid="${2:-}" mode="${3:-}" root="${4:-}" args
+  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null || return 1
+  args="$(__darkhost_process_args "$pid")"
+  case "$mode" in
+    static) [[ "$args" == *"-m http.server $port"* && "$args" == *"--directory $root"* ]] ;;
+    php) [[ "$args" == *"-S 127.0.0.1:$port"* && "$args" == *"-t $root"* ]] ;;
+    *) return 1 ;;
+  esac
+}
+
+__darkhost_server_record_remove() {
+  local port="${1:-}"
+  rm -f -- "$DARKHOST_SERVERS_DIR/$port.pid" \
+    "$DARKHOST_SERVERS_DIR/$port.mode" \
+    "$DARKHOST_SERVERS_DIR/$port.root" \
+    "$DARKHOST_SERVERS_DIR/$port.log"
+}
+
+__darkhost_server_stop() {
+  local port="${1:-8000}" pid mode root args
+  if ! __darkhost_valid_port "$port"; then
+    printf 'Port must be a number from 1 to 65535.\n' >&2
+    return 2
+  fi
+  port=$((10#$port))
+  local pidfile="$DARKHOST_SERVERS_DIR/$port.pid"
+  if [[ ! -r "$pidfile" ]]; then
+    printf 'No Dark Host server is recorded on port %s.\n' "$port" >&2
+    return 1
+  fi
+  IFS= read -r pid < "$pidfile"
+  IFS= read -r mode < "$DARKHOST_SERVERS_DIR/$port.mode" 2>/dev/null || mode=''
+  IFS= read -r root < "$DARKHOST_SERVERS_DIR/$port.root" 2>/dev/null || root=''
+  if [[ ! "$pid" =~ ^[0-9]+$ ]] || ! kill -0 "$pid" 2>/dev/null; then
+    __darkhost_server_record_remove "$port"
+    printf 'The recorded server on port %s is already stopped.\n' "$port"
+    return 0
+  fi
+  if ! __darkhost_server_matches_record "$port" "$pid" "$mode" "$root"; then
+    printf 'Refusing to stop PID %s: it no longer matches this recorded Dark Host server.\n' "$pid" >&2
+    return 1
+  fi
+  if kill "$pid" 2>/dev/null; then
+    __darkhost_server_record_remove "$port"
+    printf 'Stopped the local server on port %s.\n' "$port"
+  else
+    printf 'Could not stop the local server on port %s.\n' "$port" >&2
+    return 1
+  fi
+}
+
+__darkhost_servers_list() {
+  local pidfile port pid mode root found=0
+  mkdir -p "$DARKHOST_SERVERS_DIR"
+  printf 'DARK HOST  /  LOCAL SERVERS\n'
+  for pidfile in "$DARKHOST_SERVERS_DIR"/*.pid; do
+    [[ -f "$pidfile" ]] || continue
+    port="${pidfile##*/}"
+    port="${port%.pid}"
+    IFS= read -r pid < "$pidfile"
+    IFS= read -r mode < "$DARKHOST_SERVERS_DIR/$port.mode" 2>/dev/null || mode='unknown'
+    IFS= read -r root < "$DARKHOST_SERVERS_DIR/$port.root" 2>/dev/null || root='unknown'
+    if __darkhost_server_matches_record "$port" "$pid" "$mode" "$root"; then
+      printf '  :%s  %-6s  %s\n' "$port" "$mode" "$root"
+      found=1
+    else
+      __darkhost_server_record_remove "$port"
+    fi
+  done
+  (( found == 1 )) || printf '  No active Dark Host servers.\n'
+}
+
+__darkhost_serve() {
+  local mode=static open_after=0 target='.' port="${DARKHOST_WEB_PORT:-8000}"
+  local root pid pidfile logfile runner existing_mode existing_root
+  while (( $# > 0 )); do
+    case "$1" in
+      --help|-h)
+        printf 'Usage: dh serve [--php] [--open] [directory] [port]\n'
+        printf '       dh serve --list | --stop [port]\n'
+        printf 'Serves only on 127.0.0.1; use --php for PHP sites.\n'
+        return 0
+        ;;
+      --list) __darkhost_servers_list; return $? ;;
+      --stop) shift; __darkhost_server_stop "${1:-8000}"; return $? ;;
+      --php) mode=php; shift ;;
+      --open) open_after=1; shift ;;
+      *) break ;;
+    esac
+  done
+  if (( $# > 2 )); then
+    printf 'Usage: dh serve [--php] [--open] [directory] [port]\n' >&2
+    return 2
+  fi
+  target="${1:-.}"
+  port="${2:-$port}"
+  if ! __darkhost_valid_port "$port"; then
+    printf 'Port must be a number from 1 to 65535.\n' >&2
+    return 2
+  fi
+  port=$((10#$port))
+  if [[ ! -d "$target" ]]; then
+    printf 'Directory not found: %s\n' "$target" >&2
+    return 2
+  fi
+  root="$(cd -- "$target" 2>/dev/null && pwd -P)" || {
+    printf 'Cannot access directory: %s\n' "$target" >&2
+    return 2
+  }
+  mkdir -p "$DARKHOST_SERVERS_DIR" "$DARKHOST_LOG_DIR"
+  pidfile="$DARKHOST_SERVERS_DIR/$port.pid"
+  if [[ -r "$pidfile" ]]; then
+    pid="$(<"$pidfile")"
+    IFS= read -r existing_mode < "$DARKHOST_SERVERS_DIR/$port.mode" 2>/dev/null || existing_mode=''
+    IFS= read -r existing_root < "$DARKHOST_SERVERS_DIR/$port.root" 2>/dev/null || existing_root=''
+    if __darkhost_server_matches_record "$port" "$pid" "$existing_mode" "$existing_root"; then
+      printf 'Dark Host already has a recorded server on port %s.\n' "$port" >&2
+      printf 'Run: dh serve --stop %s\n' "$port" >&2
+      return 1
+    fi
+    __darkhost_server_record_remove "$port"
+  fi
+
+  logfile="$DARKHOST_LOG_DIR/server-$port.log"
+  if [[ "$mode" == php ]]; then
+    command -v php >/dev/null 2>&1 || {
+      printf 'PHP is not installed. Run: dh install php\n' >&2
+      return 127
+    }
+    runner="$(command -v php)"
+    nohup "$runner" -S "127.0.0.1:$port" -t "$root" > "$logfile" 2>&1 < /dev/null &
+  else
+    if command -v python3 >/dev/null 2>&1; then
+      runner="$(command -v python3)"
+    elif command -v python >/dev/null 2>&1; then
+      runner="$(command -v python)"
+    else
+      printf 'Python is not installed. Run: dh install python\n' >&2
+      return 127
+    fi
+    nohup "$runner" -m http.server "$port" --bind 127.0.0.1 --directory "$root" > "$logfile" 2>&1 < /dev/null &
+  fi
+  pid=$!
+  sleep 0.2
+  if ! kill -0 "$pid" 2>/dev/null; then
+    printf 'Could not start the local server. Details:\n' >&2
+    cat "$logfile" >&2
+    return 1
+  fi
+  printf '%s\n' "$pid" > "$pidfile"
+  printf '%s\n' "$mode" > "$DARKHOST_SERVERS_DIR/$port.mode"
+  printf '%s\n' "$root" > "$DARKHOST_SERVERS_DIR/$port.root"
+  printf '%s\n' "$logfile" > "$DARKHOST_SERVERS_DIR/$port.log"
+  printf 'Local URL: http://127.0.0.1:%s\n' "$port"
+  printf 'Serving:   %s\n' "$root"
+  printf 'Stop with: dh serve --stop %s\n' "$port"
+  if (( open_after == 1 )); then
+    __darkhost_open_url "http://127.0.0.1:$port" || printf 'Open the Local URL in your browser to preview it.\n' >&2
+  fi
+}
+
+__darkhost_run() {
+  local file="${1:-}" extension absolute port encoded_name
+  [[ -n "$file" ]] || {
+    printf 'Usage: dh run <file> [args...]\n'
+    printf '       dh run <page.html> [port]\n'
+    return 2
+  }
+  if [[ ! -f "$file" ]]; then
+    printf 'File not found: %s\n' "$file" >&2
+    return 2
+  fi
+  case "$file" in
+    /*) absolute="$file" ;;
+    *) absolute="$PWD/$file" ;;
+  esac
+  extension="${file##*.}"
+  extension="${extension,,}"
+  case "$extension" in
+    html|htm)
+      if (( $# > 2 )); then
+        printf 'Usage: dh run <page.html> [port]\n' >&2
+        return 2
+      fi
+      port="${2:-${DARKHOST_WEB_PORT:-8000}}"
+      if ! __darkhost_valid_port "$port"; then
+        printf 'Port must be a number from 1 to 65535.\n' >&2
+        return 2
+      fi
+      __darkhost_serve "$(dirname -- "$absolute")" "$port" || return $?
+      encoded_name="$(python3 -c 'import sys; from urllib.parse import quote; print(quote(sys.argv[1]))' "$(basename -- "$absolute")" 2>/dev/null)" || encoded_name="$(basename -- "$absolute")"
+      __darkhost_open_url "http://127.0.0.1:$((10#$port))/$encoded_name" || printf 'Open the Page preview URL in your browser.\n' >&2
+      printf 'Page preview: http://127.0.0.1:%s/%s\n' "$((10#$port))" "$encoded_name"
+      ;;
+    py)
+      if command -v python3 >/dev/null 2>&1; then
+        python3 "$absolute" "${@:2}"
+      elif command -v python >/dev/null 2>&1; then
+        python "$absolute" "${@:2}"
+      else
+        printf 'Python is not installed. Run: dh install python\n' >&2
+        return 127
+      fi
+      ;;
+    js|mjs|cjs)
+      command -v node >/dev/null 2>&1 || { printf 'Node.js is not installed. Run: dh install nodejs\n' >&2; return 127; }
+      node "$absolute" "${@:2}"
+      ;;
+    php)
+      command -v php >/dev/null 2>&1 || { printf 'PHP is not installed. Run: dh install php\n' >&2; return 127; }
+      php "$absolute" "${@:2}"
+      ;;
+    sh)
+      bash "$absolute" "${@:2}"
+      ;;
+    *)
+      printf 'Unsupported file type: .%s\n' "$extension" >&2
+      printf 'Supported: html, htm, py, js, mjs, cjs, php, sh\n' >&2
+      return 2
+      ;;
+  esac
+}
+
+__darkhost_dev() {
+  local project="${1:-.}" script="${2:-dev}"
+  if (( $# >= 2 )); then
+    shift 2
+  elif (( $# == 1 )); then
+    shift
+  fi
+  [[ "${1:-}" == "--" ]] && shift
+  if [[ ! -d "$project" || ! -f "$project/package.json" ]]; then
+    printf 'A project directory with package.json is required.\n' >&2
+    printf 'Usage: dh dev [project-directory] [npm-script] [-- args...]\n' >&2
+    return 2
+  fi
+  command -v npm >/dev/null 2>&1 || { printf 'npm is not installed. Run: dh install nodejs\n' >&2; return 127; }
+  ( cd -- "$project" && npm run "$script" -- "$@" )
+}
+
 __darkhost_privileged_install() {
   local -a privilege=()
 
@@ -642,6 +983,12 @@ __darkhost_help() {
     "install|Install packages with the detected package manager"
     "media|Play or open audio, video, and image files"
     "play|Open a media file or URL"
+    "files|List a directory with an icon-aware viewer when available"
+    "open|Open a local file or supported web URL with the device app"
+    "browse|Launch a web URL in the system browser"
+    "run|Run Python, Node.js, PHP, Bash, or preview an HTML page"
+    "serve|Start or manage a loopback-only local web server"
+    "dev|Run a project's npm development script"
     "suggest|Show suggestions for a command prefix"
     "lock|Lock the Dark Host session"
     "vault|Protected local workspace"
@@ -697,6 +1044,12 @@ __darkhost_help() {
 ║  dh repair     repair helper          ║
 ║  dh install    install packages       ║
 ║  dh media      play/open media        ║
+║  dh files      browse local files     ║
+║  dh open       open with device app   ║
+║  dh browse     launch browser         ║
+║  dh run        run/preview code       ║
+║  dh serve      local web server       ║
+║  dh dev        npm dev script         ║
 ║  dh suggest    command suggestions    ║
 ║                                      ║
 ║ NETWORK                               ║
@@ -1154,8 +1507,8 @@ __darkhost_version() {
 }
 
 __darkhost_about() {
-  printf 'DARK HOST V2\n'
-  printf 'Professional custom terminal OS built on top of normal Linux/Termux.\n'
+  printf 'DARK HOST %s\n' "${DARKHOST_VERSION:-unknown}"
+  printf 'A customizable Bash workstation layer for Termux and Linux.\n'
 }
 
 __darkhost_hidden_ghost() { printf 'ghost mode online\n'; }
@@ -1188,6 +1541,7 @@ __darkhost_suggest() {
   local current_word suggestion candidate count=0 context="" rest subcommand
   local -a suggestions=(
     help status system user profile network memory storage processes scan install media play
+    files open browse run serve dev
     tools theme settings update version about logout lock pause resume clear dashboard matrix
     hacker banner mode history vault monitor ping ports battery wifi device uptime logs sessions
     security alias plugin doctor repair ghost void 404 shadow root
@@ -1220,12 +1574,14 @@ __darkhost_suggest() {
         mode) suggestions=(normal hacker ghost matrix forensic void minimal) ;;
         banner) suggestions=(on off toggle) ;;
         media) suggestions=(play pause stop info help) ;;
+        serve) suggestions=(--php --open --list --stop --help) ;;
         *) return 0 ;;
       esac
       context="dh $subcommand"
     else
       suggestions=(
         help status system user profile network memory storage processes scan install media play
+        files open browse run serve dev
         tools theme settings update version about logout lock pause resume clear dashboard matrix
         hacker banner mode history vault monitor ping ports battery wifi device uptime logs sessions
         security alias plugin doctor repair ghost void 404 shadow root
@@ -1267,6 +1623,7 @@ __darkhost_complete() {
   local subcommand="${COMP_WORDS[1]:-}"
   local -a commands=(
     help status system user profile network memory storage processes scan install media play mp tools suggest
+    files open browse run serve dev
     theme settings update version about logout lock pause resume clear dashboard matrix
     hacker banner mode history vault monitor ping ports battery wifi device uptime logs
     sessions security alias plugin doctor repair ghost void 404 shadow root
@@ -1279,6 +1636,7 @@ __darkhost_complete() {
     mode) choices=(normal hacker ghost matrix forensic void minimal) ;;
     banner) choices=(on off toggle) ;;
     media) choices=(play pause stop info help) ;;
+    serve) choices=(--php --open --list --stop --help) ;;
     *)
       if (( COMP_CWORD == 1 )); then
         choices=("${commands[@]}")
@@ -1348,6 +1706,12 @@ dh() {
     install) shift; __darkhost_install "$@" ;;
     media) shift; __darkhost_media "$@" ;;
     play) shift; __darkhost_media play "$@" ;;
+    files) shift; __darkhost_files "$@" ;;
+    open) shift; __darkhost_open "$@" ;;
+    browse|browser) shift; __darkhost_browse "$@" ;;
+    run) shift; __darkhost_run "$@" ;;
+    serve) shift; __darkhost_serve "$@" ;;
+    dev) shift; __darkhost_dev "$@" ;;
     suggest) shift; __darkhost_suggest "$*" ;;
     tools) printf 'pkg apt git python node npm ssh\n' ;;
     theme) __darkhost_theme "${2:-}" ;;

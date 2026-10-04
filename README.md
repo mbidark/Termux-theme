@@ -1,118 +1,135 @@
 # DARK HOST
-### A custom shell layer for Termux
+
+### A focused workstation layer for Termux
+
+![Animated Dark Host terminal preview](assets/dark-host-preview.gif)
+
+Dark Host gives Termux a distinctive shell, a compact command center, and short commands for the work that usually means switching between tools. It stays on Bash: Android still handles your browser, media player, and file viewers, while Termux runs your code and local development servers.
 
 ```text
-┌─[dark]──[~]
-└─► dh status
+ ◇ DARK HOST  /  WORKSPACE
+  dark@android · ~/projects/site
+  dh run index.html
+  Local URL: http://127.0.0.1:8000/index.html
+  dh serve --stop 8000
 ```
 
-Give your Termux prompt a new identity without replacing the tools underneath. Dark Host adds a local sign-in screen, a configurable prompt, startup animation, and the `dh` command suite while keeping you in Bash and your normal Linux environment.
+## Install
 
-> Built for customization. Designed to stay out of the way.
-
-## Start Here
-
-For a fresh Termux install, copy and run this single line:
+In Termux:
 
 ```bash
-pkg update && pkg upgrade && pkg install git && git clone https://github.com/mbidark/Termux-theme.git ~/Dark && cd ~/Dark && chmod +x ./*.sh && ./install.sh
-```
-
-Or run the steps separately:
-
-```bash
-pkg update && pkg upgrade && pkg install git
+pkg update
+pkg install git
 git clone https://github.com/mbidark/Termux-theme.git ~/Dark
 cd ~/Dark
 chmod +x ./*.sh
 ./install.sh
 ```
 
-On a first interactive install, the setup wizard asks for a username, password, theme, prompt label, mode, banner, and animation preferences. On later installs, it offers to reconfigure the profile. Restart Termux when installation finishes.
+Restart Termux after the installer finishes. It saves its files under `~/.darkhost/` and backs up existing shell and Termux settings under `~/.dark-backup/`. Upgrades preserve your existing Bash and Termux configuration.
 
-If the installer runs without an interactive terminal, it creates the default profile: `dark` / `darkhost`. Change these credentials with `dh settings`.
+## Work from one command line
 
-## Command Deck
-
-| Area | Commands |
+| Task | Command |
 | --- | --- |
-| Overview | `dh`, `dh status`, `dh system`, `dh user`, `dh version`, `dh about` |
-| Device | `dh memory`, `dh storage`, `dh processes`, `dh battery`, `dh uptime`, `dh monitor`, `dh media` |
-| Network | `dh network`, `dh wifi`, `dh ping`, `dh ports`, `dh scan` |
-| Workspace | `dh theme`, `dh mode`, `dh banner`, `dh settings`, `dh alias`, `dh plugin` |
-| Session | `dh lock`, `dh logout`, `dh pause`, `dh resume`, `dh history`, `dh logs` |
-| Maintenance | `dh install <package>`, `dh doctor`, `dh repair`, `dh update`, `dh help` |
+| Open a photo, video, document, or folder | `dh open "path/to/file"` |
+| List a directory | `dh files [path]` |
+| Open a website in the device browser | `dh browse example.com` |
+| Play a local audio/video file or URL | `mp "path-or-url"` |
+| Run a Python, Node.js, PHP, or Bash file | `dh run script.py [args...]` |
+| Preview a static HTML page | `dh run index.html [port]` |
+| Start a static local web server | `dh serve [directory] [port]` |
+| Start a PHP development server | `dh serve --php [directory] [port]` |
+| Launch the server URL in the browser | `dh serve --open [directory] [port]` |
+| See or stop Dark Host servers | `dh serve --list` / `dh serve --stop [port]` |
+| Run a project's npm script | `dh dev [directory] [script] [-- args...]` |
 
-Current release: `2.0.2` (`dh version`). The release is also shown by `dh status`.
+### Files, browser, and media
 
-Get the full list with `dh help`; get details on a command with `dh help <command>`. Press Tab after `dh` to complete commands, or Ctrl+Space to print matching suggestions for the current command line. Use the arrow keys to search command history. Paste clipboard text with Alt+V, Alt+Shift+V, or Ctrl+P.
+`dh open` passes local paths to Android's associated app using `termux-open`; on a Linux desktop it falls back to `xdg-open`. `dh browse` opens HTTP/HTTPS URLs and adds `https://` when you provide a hostname without a scheme. `dh files` uses `eza` when installed, otherwise a standard long listing.
 
-Play a local file or URL with `mp <file-or-url>`, or search by title with `mp <search terms>` (for example, `mp lofi beats`). Quote paths that contain spaces. `mpv` handles stream URLs when installed; images open in the associated Android or desktop app. Local audio uses Termux:API when available, then falls back to `mpv` or the system opener. Install `mpv` for stream playback:
+Media playback remains opt-in through available tools. Install `mpv` for broader local and stream playback. Title search with `mp "search words"` needs both `yt-dlp` and `mpv`. Android playback controls (`dh media pause|stop|info`) need the Termux:API package **and its matching Android app**.
 
-```bash
-dh install mpv
-```
+### Run code and preview websites
 
-Title searches require both `yt-dlp` and `mpv`:
-
-```bash
-dh install yt-dlp mpv
-```
-
-`dh media pause`, `stop`, and `info` use Termux:API controls.
-
-For Termux playback controls, install the `termux-api` package and its matching Termux:API Android app. Playback depends on the installed app and codecs; no single player supports every format.
-
-Install packages with the detected system package manager:
+Install the runtimes you plan to use:
 
 ```bash
-dh install git
+dh install python nodejs php
 ```
 
-Dark Host detects Termux `pkg`, Debian/Ubuntu `apt-get`, Fedora `dnf`/`yum`, Arch `pacman`, Alpine `apk`, openSUSE `zypper`, or Homebrew. Before installing, the Termux path runs `pkg update` and `pkg upgrade`; Debian/Ubuntu runs `apt-get update` and `apt-get upgrade`. On Linux, it uses `sudo` or `doas` when elevated access is needed. The package manager handles its normal prompts; no shell evaluation or silent auto-confirm is used. Run `dh install --help` for usage.
-
-## Make It Yours
-
-Run `dh settings` for a menu that stays open while you change credentials, theme, mode, prompt label, banner, and animation preferences. Each change is saved immediately. Use `dh banner on` or `dh banner off` to control the startup banner directly. Settings are stored under `~/.darkhost/`.
-
-Available themes include `black`, `blood`, `matrix`, `ghost`, `void`, `cyber`, and `terminal`. Modes include `normal`, `hacker`, `ghost`, `matrix`, `forensic`, `void`, and `minimal`.
-
-## Update or Remove
-
-If your installed `dh update` still prints the old `Current version` / `Available` menu, it cannot apply the update because that menu does not read input. From the repository checkout, bootstrap the new updater directly, then fully close and reopen Termux:
+Examples:
 
 ```bash
-cd "$HOME/Dark" && git pull --ff-only origin main && DARKHOST_UPDATE=1 bash ./install.sh
+dh run hello.py
+dh run app.js
+dh run report.php
+dh run index.html 8081
+dh serve --php ./my-site 8080
+dh dev ./my-app dev -- --host 127.0.0.1
 ```
 
-Replace `"$HOME/Dark"` with your checkout path if you installed it elsewhere.
+Static and PHP development servers bind to `127.0.0.1` by default. They are reachable from the same device's browser, not exposed to your Wi-Fi network. `dh serve --list` shows Dark Host servers started in this shell environment; stop one with `dh serve --stop 8080`. Server output is saved under `~/.darkhost/logs/`.
 
-Run `dh update` from an interactive terminal to choose the Git checkout path (default: `~/Dark`) and confirm the update. It shows the selected branch before proceeding and leaves the terminal screen intact:
+For a PHP website, use `dh serve --php <directory>`; `dh run file.php` executes a PHP script in CLI mode. HTML preview needs Python. The `dh dev` shortcut runs an existing `npm` script—it does not install project dependencies for you.
+
+## The shell
+
+- `dh` opens the status dashboard; `dh status`, `dh system`, and `dh monitor` show more detail.
+- Themes: `black`, `blood`, `matrix`, `ghost`, `void`, `cyber`, and `terminal`.
+- Visual modes: `normal`, `hacker`, `ghost`, `matrix`, `forensic`, `void`, and `minimal`.
+- `dh settings` changes profile, prompt, mode, banner, and animation preferences.
+- Tab completes Dark Host commands. Up/down searches command history. `Ctrl+Space` shows suggestions; `Ctrl+H` opens help; `Ctrl+L` clears the terminal.
+- `dh doctor` checks the installation; `dh install <package>` uses the detected package manager; `dh update` checks for a fast-forward update.
+
+Run `dh help` for the command catalog, or `dh help <command>` for details. The installed release is shown by `dh version`.
+
+### Optional Termux tools
+
+```bash
+dh install eza mpv yt-dlp termux-api
+```
+
+`eza` and `mpv` are optional. `yt-dlp` is only needed for title-based media search. The `termux-api` command-line package requires its matching Android app for device integrations. Install only what you need.
+
+## Customize and maintain
+
+Settings and local server records live in `~/.darkhost/`. Run `dh settings` to configure the prompt and appearance; `dh theme matrix` switches the theme, and `dh banner off` disables the startup display.
+
+To update an older checkout from inside Termux:
 
 ```bash
 dh update
 ```
 
-For non-interactive use, pass an explicit path and confirmation flag:
+The updater shows the selected checkout and available version, then asks before pulling. For a non-interactive update, specify both the checkout path and confirmation:
 
 ```bash
 dh update --yes "$HOME/Dark"
 ```
 
-The updater detects the repository's default branch from `origin`, displays the installed and available release versions, and uses a fast-forward-only pull. It preserves your existing Bash and Termux settings and skips the setup wizard during upgrades.
-
-To remove the shell layer and restore backed-up startup files:
+To uninstall and restore backed-up startup files:
 
 ```bash
 cd ~/Dark
 ./uninstall.sh
 ```
 
-## Under the Hood
+## Security and compatibility
 
-- Bash functions and startup files provide the Dark Host layer; standard shell commands remain available.
-- User settings and session data live in `~/.darkhost/`.
-- The installer backs up existing shell and Termux settings in `~/.dark-backup/` before installing.
-- No root access or replacement shell is required.
+Dark Host is a user-space Bash customization, **not a replacement operating system, Android security boundary, or real account lock**. Its legacy sign-in feature is only a shell-level gate; credentials are stored locally and must not be reused from sensitive accounts. Keep Android's device lock enabled.
 
-**Security note:** Dark Host's sign-in is a shell-level gate, not Android or Linux account security. Credentials are stored locally in the user's home directory, so do not reuse sensitive passwords. The non-interactive install defaults are `dark` / `darkhost`; replace them before relying on the sign-in screen.
+No root access is required. Package availability and media formats depend on your Termux build, device, and installed Android apps. This project does not embed a graphical browser, full-screen file manager, or media player.
+
+## Development
+
+Run the smoke tests from the repository checkout:
+
+```bash
+bash tests/darkhost_smoke.sh
+```
+
+The suite checks the shell commands, installer upgrade behavior, browser URL validation, code runners, and a loopback HTTP server.
+
+**Release:** `2.1.0` · **License:** MIT

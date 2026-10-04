@@ -89,7 +89,8 @@ mkdir -p \
   "$HOME/.darkhost/themes" \
   "$HOME/.darkhost/plugins" \
   "$HOME/.darkhost/profiles" \
-  "$HOME/.darkhost/backups"
+  "$HOME/.darkhost/backups" \
+  "$HOME/.darkhost/servers"
 
 if (( is_upgrade == 0 )); then
   cp "$ROOT/bashrc" "$HOME/.bashrc"
