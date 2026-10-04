@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -u
 script="/workspaces/Termux-theme/darkhost.sh"
+repo_root="$(cd "$(dirname "$script")" && pwd)"
 if [[ ! -f "$script" ]]; then
   echo "FAIL: darkhost.sh not found" >&2
   exit 1
@@ -44,6 +45,42 @@ if [[ $? -ne 0 ]]; then
   exit 1
 fi
 
+preserve_home="$(mktemp -d)"
+HOME="$preserve_home" bash "$repo_root/install.sh" </dev/null >/dev/null
+printf '\n# USER_BASHRC_PRESERVE_PROBE\n' >> "$preserve_home/.bashrc"
+printf '\n# USER_PROFILE_PRESERVE_PROBE\n' >> "$preserve_home/.profile"
+printf '\n# USER_TERMUX_PRESERVE_PROBE\n' >> "$preserve_home/.termux/termux.properties"
+upgrade_output="$(HOME="$preserve_home" DARKHOST_UPDATE=1 bash "$repo_root/install.sh" </dev/null)"
+preserved=1
+grep -q USER_BASHRC_PRESERVE_PROBE "$preserve_home/.bashrc" || preserved=0
+grep -q USER_PROFILE_PRESERVE_PROBE "$preserve_home/.profile" || preserved=0
+grep -q USER_TERMUX_PRESERVE_PROBE "$preserve_home/.termux/termux.properties" || preserved=0
+[[ "$upgrade_output" != *$'\033c'* ]] || preserved=0
+rm -rf "$preserve_home"
+if (( preserved == 0 )); then
+  echo "FAIL: update install overwrote user files or reset the terminal" >&2
+  exit 1
+fi
+
+diagnostic_home="$(mktemp -d)"
+if HOME="$diagnostic_home" DARKHOST_CONFIG_FILE="$diagnostic_home/missing.conf" __darkhost_scan >"$diagnostic_home/scan.out"; then
+  rm -rf "$diagnostic_home"
+  echo "FAIL: dh scan reported success with required files missing" >&2
+  exit 1
+fi
+if HOME="$diagnostic_home" DARKHOST_CONFIG_FILE="$diagnostic_home/missing.conf" __darkhost_doctor >"$diagnostic_home/doctor.out"; then
+  rm -rf "$diagnostic_home"
+  echo "FAIL: dh doctor reported success with the installation missing" >&2
+  exit 1
+fi
+if [[ "$(<"$diagnostic_home/scan.out")" != *"CHECK(S) NEED ATTENTION"* || \
+    "$(<"$diagnostic_home/doctor.out")" != *"CHECK(S) NEED ATTENTION"* ]]; then
+  rm -rf "$diagnostic_home"
+  echo "FAIL: diagnostics did not describe missing installation checks" >&2
+  exit 1
+fi
+rm -rf "$diagnostic_home"
+
 COMP_WORDS=(dh sta)
 COMP_CWORD=1
 __darkhost_complete
@@ -76,6 +113,21 @@ if [[ "$suggestion_output" != *"dh help"* ]]; then
   echo "FAIL: command suggestions did not work for the dh prefix" >&2
   exit 1
 fi
+suggestion_output="$( __darkhost_suggest 'dh media p' )"
+if [[ "$suggestion_output" != *"dh media play"* || "$suggestion_output" != *"dh media pause"* ]]; then
+  echo "FAIL: nested media suggestions did not include complete commands" >&2
+  exit 1
+fi
+
+status_output="$(dh status)"
+dashboard_output="$(dh)"
+system_output="$(dh system)"
+if [[ "$status_output" != *"DARK HOST  /  STATUS"* || "$status_output" != *"WORKING DIR"* || \
+    "$dashboard_output" != *"RESOURCE SNAPSHOT"* && "$dashboard_output" != *"RESOURCES"* || \
+    "$dashboard_output" != *"PROFILE"* || "$system_output" != *"PLATFORM"* ]]; then
+  echo "FAIL: status, dashboard, or system details were incomplete" >&2
+  exit 1
+fi
 
 config_write_count=0
 __darkhost_write_config() { config_write_count=$((config_write_count + 1)); }
@@ -96,6 +148,11 @@ if [[ "$DARKHOST_BANNER" != "1" ]]; then
   echo "FAIL: dh banner on did not enable the banner" >&2
   exit 1
 fi
+startup_output="$(__darkhost_startup_banner)"
+if [[ "$startup_output" != *"DARK HOST  /  TERMINAL ENVIRONMENT"* || "$startup_output" == *$'\033'* ]]; then
+  echo "FAIL: startup intro was missing or emitted terminal escapes when redirected" >&2
+  exit 1
+fi
 
 history_file="$(mktemp)"
 DARKHOST_HISTORY_FILE="$history_file"
@@ -113,6 +170,12 @@ fi
 termux_media_player() { printf 'MOCK MEDIA PLAYER'; printf ' <%s>' "$@"; }
 termux-media-player() { termux_media_player "$@"; }
 termux-open() { printf 'MOCK OPEN <%s>' "$1"; }
+mpv() { printf 'MOCK MPV'; printf ' <%s>' "$@"; }
+media_args_file="$(mktemp)"
+yt-dlp() {
+  printf '%s\n' "$*" > "$media_args_file"
+  printf 'https://stream.invalid/audio.m4a\n'
+}
 audio_file="$(mktemp --suffix=.mp3)"
 audio_output="$(mp "$audio_file")"
 rm -f "$audio_file"
@@ -126,8 +189,48 @@ if [[ "$image_output" != *"MOCK OPEN <https://media.invalid/cover.webp>"* ]]; th
   exit 1
 fi
 video_output="$(dh media play 'https://media.invalid/clip.mp4')"
-if [[ "$video_output" != *"MOCK OPEN <https://media.invalid/clip.mp4>"* ]]; then
-  echo "FAIL: video did not route through the system media opener" >&2
+if [[ "$video_output" != *"MOCK MPV <--> <https://media.invalid/clip.mp4>"* ]]; then
+  echo "FAIL: video URL did not route through the media player" >&2
+  exit 1
+fi
+stream_output="$(mp 'https://media.invalid/watch?id=42')"
+if [[ "$stream_output" != *"MOCK MPV <--> <https://media.invalid/watch?id=42>"* ]]; then
+  echo "FAIL: direct media URL did not route through the media player" >&2
+  exit 1
+fi
+search_output="$(mp lofi beats)"
+if [[ "$search_output" != *"MOCK MPV <--> <https://stream.invalid/audio.m4a>"* || \
+    "$(<"$media_args_file")" != *"ytsearch1:lofi beats"* ]]; then
+  echo "FAIL: media name search did not resolve and play a result" >&2
+  exit 1
+fi
+rm -f "$media_args_file"
+update_help="$(dh update --help)"
+if [[ "$update_help" != *"Usage: dh update [--yes] [checkout-path]"* ]]; then
+  echo "FAIL: dh update help did not explain path and confirmation options" >&2
+  exit 1
+fi
+update_error_file="$(mktemp)"
+if dh update </dev/null >"$update_error_file" 2>&1; then
+  rm -f "$update_error_file"
+  echo "FAIL: dh update unexpectedly ran without an interactive confirmation" >&2
+  exit 1
+fi
+if [[ "$(<"$update_error_file")" != *"Interactive terminal required"* ]]; then
+  rm -f "$update_error_file"
+  echo "FAIL: non-interactive dh update did not explain how to proceed" >&2
+  exit 1
+fi
+rm -f "$update_error_file"
+update_root="$(mktemp -d)"
+update_repo="$update_root/checkout with spaces"
+mkdir -p "$update_repo"
+git -C "$update_repo" init --quiet
+printf '%s\n' '#!/usr/bin/env bash' 'printf "MOCK UPDATE EXECUTED\\n"' > "$update_repo/update.sh"
+update_output="$(dh update --yes "$update_repo")"
+rm -rf "$update_root"
+if [[ "$update_output" != *"Checkout: $update_repo"* || "$update_output" != *"MOCK UPDATE EXECUTED"* ]]; then
+  echo "FAIL: dh update did not run the updater from the selected checkout path" >&2
   exit 1
 fi
 media_control_output="$(dh media pause)"

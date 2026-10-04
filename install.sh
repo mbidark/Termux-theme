@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 T="$HOME/.termux"
 B="$HOME/.dark-backup"
 CONFIG_FILE="$HOME/.darkhost/config/darkhost.conf"
+is_upgrade=0
+[[ -f "$HOME/.darkhost/darkhost.sh" ]] && is_upgrade=1
 
 __darkhost_setup_wizard() {
   if [[ ! -t 0 ]]; then
@@ -88,18 +90,20 @@ mkdir -p \
   "$HOME/.darkhost/profiles" \
   "$HOME/.darkhost/backups"
 
-cp "$ROOT/bashrc" "$HOME/.bashrc"
-cp "$ROOT/bash_profile" "$HOME/.bash_profile"
-cp "$ROOT/profile" "$HOME/.profile"
-cp "$ROOT/colors.properties" "$T/colors.properties"
-cp "$ROOT/termux.properties" "$T/termux.properties"
+if (( is_upgrade == 0 )); then
+  cp "$ROOT/bashrc" "$HOME/.bashrc"
+  cp "$ROOT/bash_profile" "$HOME/.bash_profile"
+  cp "$ROOT/profile" "$HOME/.profile"
+  cp "$ROOT/colors.properties" "$T/colors.properties"
+  cp "$ROOT/termux.properties" "$T/termux.properties"
+fi
 cp "$ROOT/darkhost.sh" "$HOME/.darkhost/darkhost.sh"
 chmod +x "$HOME/.darkhost/darkhost.sh"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   __darkhost_setup_wizard
 else
-  if [[ -t 0 ]]; then
+  if [[ -t 0 && "${DARKHOST_UPDATE:-0}" != 1 ]]; then
     printf '\nDark Host profile already exists.\n'
     read -p 'Reconfigure now? [Y/n]: ' reconfigure
     if [[ -z "$reconfigure" || "$reconfigure" =~ ^[Yy]$ ]]; then
@@ -114,7 +118,8 @@ printf '%s\n' "$(grep '^DARKHOST_PASSWORD=' "$CONFIG_FILE" 2>/dev/null | cut -d'
 touch "$HOME/.hushlogin"
 termux-reload-settings 2>/dev/null || true
 
-cat > "$HOME/.bashrc" <<'EOF'
+if (( is_upgrade == 0 )); then
+  cat > "$HOME/.bashrc" <<'EOF'
 # Dark Host bootstrap
 if [[ -f "$HOME/.darkhost/darkhost.sh" ]]; then
   . "$HOME/.darkhost/darkhost.sh"
@@ -150,20 +155,24 @@ if [[ -f "$HOME/.darkrc" ]]; then
   source "$HOME/.darkrc"
 fi
 EOF
+fi
 
-printf '\033c'
-printf '\033[1;32m'
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  printf '\033[38;5;46m'
+fi
 cat <<'EOF'
 ╔══════════════════════════════════════╗
 ║          D A R K   H O S T          ║
-║         S E C U R E   C O R E      ║
+║         T E R M I N A L  S H E L L   ║
 ╠══════════════════════════════════════╣
-║  STATUS : ONLINE                   ║
-║  MODE   : CUSTOM SHELL             ║
-║  ACCESS : SECURE TERMINAL          ║
+║  STATUS : INSTALLED                ║
+║  SHELL  : BASH BOOTSTRAP            ║
+║  PROFILE: LOCAL CONFIGURATION       ║
 ╚══════════════════════════════════════╝
 EOF
-printf '\033[0m'
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  printf '\033[0m'
+fi
 echo
 echo "[✓] Dark Host shell installed permanently."
 echo "[✓] Bash bootstrap configured."

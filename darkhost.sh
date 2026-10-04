@@ -172,10 +172,8 @@ __darkhost_matrix_fail() {
 __darkhost_access_granted() {
   clear
   printf '\n[✓] Identity verified\n'
-  printf '[✓] Secure session established\n'
-  printf '[✓] Dark Core loaded\n'
-  printf '[✓] Command Engine loaded\n'
-  printf '[✓] Suggestion Engine loaded\n\n'
+  printf '[✓] Dark Host shell session authenticated\n'
+  printf '[✓] Profile and command interface ready\n\n'
   if [[ "${DARKHOST_ANIMATIONS:-1}" == "1" ]]; then
     printf 'Initializing DARK CORE...\n'
     for _ in 1 2 3 4 5 6; do
@@ -190,16 +188,16 @@ __darkhost_access_granted() {
 }
 
 __darkhost_login_banner() {
-  cat <<'BANNER'
-╔══════════════════════════════════════╗
-║                                      ║
-║             DARK HOST                ║
-║          SECURE TERMINAL             ║
-║                                      ║
-╚══════════════════════════════════════╝
-
-AUTHENTICATION REQUIRED
-BANNER
+  local accent='' reset=''
+  if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    __darkhost_apply_theme
+    accent="$DARKHOST_ACCENT"
+    reset='\033[0m'
+  fi
+  printf '\n%b╭────────────────────────────────────────╮%b\n' "$accent" "$reset"
+  printf '%b│  DARK HOST  /  ACCESS GATE             │%b\n' "$accent" "$reset"
+  printf '%b│  Verify your local terminal identity   │%b\n' "$accent" "$reset"
+  printf '%b╰────────────────────────────────────────╯%b\n' "$accent" "$reset"
 }
 
 __darkhost_login() {
@@ -216,9 +214,15 @@ __darkhost_login() {
   while true; do
     clear
     __darkhost_login_banner
-    printf '\nUSERNAME: '
+    local accent='' reset=''
+    if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+      __darkhost_apply_theme
+      accent="$DARKHOST_ACCENT"
+      reset='\033[0m'
+    fi
+    printf '\n%bUSERNAME%b ' "$accent" "$reset"
     IFS= read -r user || return 1
-    printf 'PASSWORD: '
+    printf '%bPASSWORD%b ' "$accent" "$reset"
     IFS= read -r -s pass || return 1
     printf '\n'
 
@@ -307,20 +311,32 @@ __darkhost_prompt() {
 }
 
 __darkhost_status() {
-  printf 'DARK HOST STATUS\n'
-  printf 'User: %s\n' "${DARKHOST_USERNAME:-dark}"
-  printf 'Theme: %s\n' "${DARKHOST_THEME:-black}"
-  printf 'Security: active\n'
-  printf 'Mode: %s\n' "${DARKHOST_MODE:-normal}"
-  printf 'Session: online\n'
+  local host uptime_value banner_state
+  host="$(hostname 2>/dev/null || uname -n 2>/dev/null || printf 'unknown')"
+  uptime_value="$(uptime -p 2>/dev/null || uptime 2>/dev/null || printf 'unavailable')"
+  banner_state="${DARKHOST_BANNER:-1}"
+  [[ "$banner_state" == 1 ]] && banner_state="enabled" || banner_state="disabled"
+
+  printf 'DARK HOST  /  STATUS\n'
+  printf '%-14s %s\n' 'USER' "${DARKHOST_USERNAME:-dark}" 'HOST' "$host"
+  printf '%-14s %s\n' 'UPTIME' "$uptime_value" 'SHELL' "Bash ${BASH_VERSION%%(*}"
+  printf '%-14s %s\n' 'THEME' "${DARKHOST_THEME:-black}" 'MODE' "${DARKHOST_MODE:-normal}"
+  printf '%-14s %s\n' 'STARTUP BANNER' "$banner_state" 'WORKING DIR' "$(__darkhost_prompt_path)"
 }
 
 __darkhost_system() {
-  printf 'DARK HOST SYSTEM\n'
-  uname -a 2>/dev/null || printf 'uname unavailable\n'
-  printf 'Device: %s\n' "$(getprop ro.product.model 2>/dev/null || echo unknown)"
-  printf 'Android: %s\n' "$(getprop ro.build.version.release 2>/dev/null || echo unknown)"
-  printf 'Kernel: %s\n' "$(uname -r 2>/dev/null || echo unknown)"
+  local device android_release os_info
+  os_info="$(uname -srm 2>/dev/null || printf 'unavailable')"
+  device="$(getprop ro.product.model 2>/dev/null || true)"
+  android_release="$(getprop ro.build.version.release 2>/dev/null || true)"
+  [[ -n "$device" ]] || device="not reported by this system"
+  [[ -n "$android_release" ]] || android_release="not Android"
+
+  printf 'DARK HOST  /  SYSTEM\n'
+  printf '%-14s %s\n' 'PLATFORM' "$os_info" 'DEVICE' "$device"
+  printf '%-14s %s\n' 'ANDROID' "$android_release" 'KERNEL' "$(uname -r 2>/dev/null || printf 'unavailable')"
+  printf '%-14s %s\n' 'SHELL' "Bash ${BASH_VERSION%%(*}"
+  printf '%-14s %s\n' 'HOME' "$HOME" 'LOCATION' "$PWD"
 }
 
 __darkhost_network() {
@@ -343,13 +359,44 @@ __darkhost_processes() {
 }
 
 __darkhost_scan() {
+  local failures=0
   printf 'DARK HOST SAFE SCAN\n'
-  printf '[✓] Local configuration\n'
-  printf '[✓] Shell integration\n'
-  printf '[✓] Network interface\n'
-  printf '[✓] Process list\n'
-  printf '[✓] Disk access\n'
-  printf '\nSYSTEM HEALTH: GOOD\n'
+  if [[ -r "$DARKHOST_CONFIG_FILE" ]]; then
+    printf '[✓] Local configuration\n'
+  else
+    printf '[!] Local configuration missing or unreadable\n'
+    failures=$((failures + 1))
+  fi
+  if [[ -r "$HOME/.bashrc" ]] && grep -Fq '.darkhost/darkhost.sh' "$HOME/.bashrc"; then
+    printf '[✓] Shell integration\n'
+  else
+    printf '[!] Dark Host Bash integration not detected\n'
+    failures=$((failures + 1))
+  fi
+  if command -v ip >/dev/null 2>&1 || command -v ifconfig >/dev/null 2>&1; then
+    printf '[✓] Network inspection tool\n'
+  else
+    printf '[!] Network inspection tool unavailable\n'
+    failures=$((failures + 1))
+  fi
+  if command -v ps >/dev/null 2>&1 && ps -e >/dev/null 2>&1; then
+    printf '[✓] Process inspection\n'
+  else
+    printf '[!] Process inspection unavailable\n'
+    failures=$((failures + 1))
+  fi
+  if [[ -r "$HOME" && -w "$HOME" ]]; then
+    printf '[✓] Home directory access\n'
+  else
+    printf '[!] Home directory access unavailable\n'
+    failures=$((failures + 1))
+  fi
+  if (( failures == 0 )); then
+    printf '\nSCAN RESULT: ALL CHECKS PASSED\n'
+  else
+    printf '\nSCAN RESULT: %s CHECK(S) NEED ATTENTION\n' "$failures"
+    return 1
+  fi
 }
 
 __darkhost_media_open() {
@@ -366,27 +413,45 @@ __darkhost_media_open() {
 }
 
 __darkhost_media() {
-  local action="${1:-help}" target resource extension is_url=0
+  local action="${1:-help}" target resource extension is_url=0 stream_url
 
   case "$action" in
     help|--help|-h)
       printf 'Usage: dh media play <file-or-url>\n'
       printf '       dh media pause|stop|info\n'
-      printf 'Uses mpv, Termux:API, or your system media app when available.\n'
+      printf 'Use mp <file-or-url|search terms> to play a file, URL, or search result.\n'
+      printf 'Uses mpv, yt-dlp, Termux:API, or your system media app when available.\n'
       return 0
       ;;
     play)
       shift
-      if [[ $# -ne 1 ]]; then
-        printf 'Usage: dh media play <file-or-url>\n' >&2
+      if [[ $# -eq 0 ]]; then
+        printf 'Usage: mp <file-or-url|search terms>\n' >&2
         return 2
       fi
-      target="$1"
+      target="$*"
       if [[ "$target" =~ ^[[:alpha:]][[:alnum:].+-]*:// ]]; then
         is_url=1
       elif [[ ! -e "$target" ]]; then
-        printf 'Media file not found: %s\n' "$target" >&2
-        return 2
+        if ! command -v yt-dlp >/dev/null 2>&1; then
+          printf 'No local file named "%s" and yt-dlp is not installed. Install yt-dlp to search by name.\n' "$target" >&2
+          return 127
+        fi
+        if ! command -v mpv >/dev/null 2>&1; then
+          printf 'Name searches require mpv to play results. Install mpv, then try again.\n' >&2
+          return 127
+        fi
+        stream_url="$(yt-dlp --no-playlist --format 'bestaudio/best' --get-url "ytsearch1:$target")" || {
+          printf 'No playable result found for: %s\n' "$target" >&2
+          return 1
+        }
+        stream_url="${stream_url%%$'\n'*}"
+        if [[ -z "$stream_url" ]]; then
+          printf 'No playable result found for: %s\n' "$target" >&2
+          return 1
+        fi
+        mpv -- "$stream_url"
+        return $?
       fi
 
       resource="${target%%\?*}"
@@ -414,7 +479,9 @@ __darkhost_media() {
           fi
           ;;
         *)
-          if command -v termux-open >/dev/null 2>&1 || command -v xdg-open >/dev/null 2>&1; then
+          if (( is_url == 1 )) && command -v mpv >/dev/null 2>&1; then
+            mpv -- "$target"
+          elif command -v termux-open >/dev/null 2>&1 || command -v xdg-open >/dev/null 2>&1; then
             __darkhost_media_open "$target"
           elif command -v mpv >/dev/null 2>&1; then
             mpv -- "$target"
@@ -508,26 +575,38 @@ __darkhost_install() {
 
 __darkhost_dashboard() {
   local user_name="${DARKHOST_USERNAME:-dark}"
-  local cpu ram disk
+  local cpu ram disk host uptime_value shell_name color='' reset=''
   cpu="$(top -bn1 2>/dev/null | awk '/Cpu/ {print $2 + $4 + $6}' | head -n 1 || echo N/A)"
   ram="$(free -m 2>/dev/null | awk '/^Mem:/ {print $3 "/" $2 " MB"}' || echo unknown)"
-  disk="$(df -P / 2>/dev/null | tail -n +2 | awk '{print $5}' | head -n 1 || echo 0%)"
+  disk="$(df -P "$HOME" 2>/dev/null | tail -n +2 | awk '{print $5}' | head -n 1 || true)"
+  host="$(hostname 2>/dev/null || uname -n 2>/dev/null || printf 'unknown')"
+  uptime_value="$(uptime -p 2>/dev/null || uptime 2>/dev/null || printf 'unavailable')"
+  shell_name="Bash ${BASH_VERSION%%(*}"
+  cpu="${cpu:-unavailable}"
+  ram="${ram:-unavailable}"
+  disk="${disk:-unavailable}"
+  if [[ "$cpu" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    cpu="${cpu}%"
+  else
+    cpu="unavailable"
+  fi
+  [[ "$disk" == *% ]] || [[ "$disk" == unavailable ]] || disk="${disk}%"
+  if [[ -t 1 ]]; then
+    __darkhost_apply_theme
+    color="$DARKHOST_ACCENT"
+    reset='\033[0m'
+  fi
 
-  cat <<EOF
-╔════════════════════════════════════════════╗
-║              DARK HOST CORE               ║
-╠══════════════╦══════════════╦══════════════╣
-║ SYSTEM       ║ NETWORK      ║ SECURITY     ║
-║ CPU ${cpu}%    ║ ONLINE       ║ ACTIVE       ║
-║ RAM ${ram}    ║ SAFE         ║ 0 ALERTS     ║
-║ DISK ${disk}%  ║ STABLE       ║ LOCKED       ║
-╠══════════════╩══════════════╩══════════════╣
-║ USER     : ${user_name}                   ║
-║ SESSION  : ACTIVE                         ║
-║ COMMAND  : dh status                     ║
-║ CORE     : READY                        ║
-╚════════════════════════════════════════════╝
-EOF
+  printf '\n%bDARK HOST%b  /  CONSOLE\n' "$color" "$reset"
+  printf '%s  ·  %s  ·  %s\n' "$host" "$user_name" "$shell_name"
+  printf '────────────────────────────────────────────\n'
+  printf '\n%bSYSTEM%b\n' "$color" "$reset"
+  printf '  %-14s %s\n' 'UPTIME' "$uptime_value" 'LOCATION' "$(__darkhost_prompt_path)"
+  printf '\n%bRESOURCES%b\n' "$color" "$reset"
+  printf '  %-14s %s\n' 'CPU SAMPLE' "$cpu" 'MEMORY' "$ram" 'HOME DISK' "$disk"
+  printf '\n%bPROFILE%b\n' "$color" "$reset"
+  printf '  %-14s %s\n' 'THEME' "${DARKHOST_THEME:-black}" 'MODE' "${DARKHOST_MODE:-normal}"
+  printf '\n  dh help   Browse commands\n  dh status View session details\n\n'
 }
 
 __darkhost_help() {
@@ -561,7 +640,7 @@ __darkhost_help() {
     "banner|Toggle startup banner"
     "settings|Dark Host preferences and recovery info"
     "alias|Useful command aliases and shortcuts"
-    "update|Update and version check flow"
+    "update|Pull a fast-forward update and reinstall Dark Host"
     "version|Dark Host version information"
     "doctor|Health check for config and shell integration"
     "repair|Repair missing or broken Dark Host layout"
@@ -803,9 +882,39 @@ __darkhost_banner_toggle() {
 
 __darkhost_startup_banner() {
   [[ "${DARKHOST_STARTUP:-1}" == "1" && "${DARKHOST_BANNER:-1}" == "1" ]] || return 0
-  printf '\n[DARK CORE]\n'
-  printf '[✓] USER\n[✓] STORAGE\n[✓] NETWORK\n[✓] TERMINAL\n[✓] COMMAND ENGINE\n[✓] SUGGESTION ENGINE\n[✓] EVENT ENGINE\n\n'
-  printf 'DARK HOST READY.\n\n'
+  local host color='' reset='' step percent filled empty stage
+  host="$(hostname 2>/dev/null || uname -n 2>/dev/null || printf 'terminal')"
+  if [[ -t 1 ]]; then
+    __darkhost_apply_theme
+    color="$DARKHOST_ACCENT"
+    reset='\033[0m'
+  fi
+
+  printf '\n%b  ◇ DARK HOST  /  TERMINAL ENVIRONMENT%b\n' "$color" "$reset"
+  printf '  ─────────────────────────────────────────\n'
+  if [[ -t 1 && "${DARKHOST_ANIMATIONS:-1}" == "1" ]]; then
+    printf '  BOOT SEQUENCE  /  %s\n' "$host"
+    for step in {1..9}; do
+      printf -v filled '%*s' "$step" ''
+      filled="${filled// /▰}"
+      printf -v empty '%*s' "$((9 - step))" ''
+      empty="${empty// /▱}"
+      percent=$((step * 100 / 9))
+      if (( step <= 3 )); then
+        stage='PROFILE'
+      elif (( step <= 6 )); then
+        stage='PROMPT'
+      else
+        stage='SESSION'
+      fi
+      printf '\r\033[2K  %b[%s%s]%b %3d%%  %s' "$color" "$filled" "$empty" "$reset" "$percent" "$stage"
+      sleep 0.035
+    done
+    printf '\n'
+  else
+    printf '  Session ready\n'
+  fi
+  printf '  %s  ·  %s  ·  %s\n\n' "$host" "${DARKHOST_THEME:-black}" "${DARKHOST_MODE:-normal}"
 }
 
 __darkhost_lock() {
@@ -888,10 +997,11 @@ __darkhost_ports() {
 
 __darkhost_aliases() {
   printf 'DARK HOST ALIASES\n'
-  printf 'll → ls -lah\n'
-  printf 'dc → cd\n'
-  printf 'gs → git status\n'
-  printf 'update → pkg update && pkg upgrade\n'
+  printf 'll    → ls -lah\n'
+  printf 'la    → ls -A\n'
+  printf 'g     → git\n'
+  printf 'glog  → git log --oneline --decorate --graph -15\n'
+  printf 'mkcd <directory>  Create a directory and enter it\n'
 }
 
 __darkhost_plugin() {
@@ -912,12 +1022,32 @@ __darkhost_plugin() {
 }
 
 __darkhost_doctor() {
+  local failures=0
   printf 'DARK HOST DIAGNOSTICS\n'
-  [[ -f "$DARKHOST_CONFIG_FILE" ]] && printf '[✓] Configuration\n' || printf '[!] Configuration missing\n'
-  [[ -f "$HOME/.bashrc" ]] && printf '[✓] Shell integration\n' || printf '[!] Shell integration missing\n'
-  [[ -f "$HOME/.darkhost/darkhost.sh" ]] && printf '[✓] Command engine\n' || printf '[!] Command engine missing\n'
-  printf '[✓] Permissions\n'
-  printf 'SYSTEM HEALTH: GOOD\n'
+  if [[ -r "$DARKHOST_CONFIG_FILE" ]]; then
+    printf '[✓] Configuration readable\n'
+  else
+    printf '[!] Configuration missing or unreadable\n'
+    failures=$((failures + 1))
+  fi
+  if [[ -r "$HOME/.bashrc" ]] && grep -Fq '.darkhost/darkhost.sh' "$HOME/.bashrc"; then
+    printf '[✓] Bash integration detected\n'
+  else
+    printf '[!] Bash integration not detected\n'
+    failures=$((failures + 1))
+  fi
+  if [[ -r "$HOME/.darkhost/darkhost.sh" ]]; then
+    printf '[✓] Command engine readable\n'
+  else
+    printf '[!] Command engine missing or unreadable\n'
+    failures=$((failures + 1))
+  fi
+  if (( failures == 0 )); then
+    printf 'DIAGNOSTIC RESULT: READY\n'
+  else
+    printf 'DIAGNOSTIC RESULT: %s CHECK(S) NEED ATTENTION\n' "$failures"
+    return 1
+  fi
 }
 
 __darkhost_repair() {
@@ -929,10 +1059,60 @@ __darkhost_repair() {
 }
 
 __darkhost_update() {
-  printf 'DARK HOST UPDATE\n'
-  printf 'Current version : 2.0.0\n'
-  printf 'Available       : 2.0.1\n'
-  printf '\n[ENTER] Update\n[ESC] Cancel\n'
+  local repo_path="${DARKHOST_REPO:-$HOME/Dark}" selection='' answer='' branch='' assume_yes=0
+
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    printf 'Usage: dh update [--yes] [checkout-path]\n'
+    printf 'Prompts for a checkout path and confirmation, then pulls and reinstalls Dark Host.\n'
+    return 0
+  fi
+  if [[ "${1:-}" == "--yes" ]]; then
+    assume_yes=1
+    shift
+  fi
+  if (( $# > 1 )); then
+    printf 'Usage: dh update [--yes] [checkout-path]\n' >&2
+    return 2
+  fi
+  if [[ -n "${1:-}" ]]; then
+    repo_path="$1"
+  fi
+  if (( assume_yes == 0 )); then
+    if [[ ! -t 0 ]]; then
+      printf 'Interactive terminal required. Use: dh update --yes [checkout-path]\n' >&2
+      return 2
+    fi
+    printf 'DARK HOST UPDATE\n'
+    read -r -p "Git checkout path [$repo_path]: " selection || return 1
+    repo_path="${selection:-$repo_path}"
+  fi
+  case "$repo_path" in
+    '~') repo_path="$HOME" ;;
+    '~/'*) repo_path="$HOME/${repo_path#\~/}" ;;
+  esac
+
+  if [[ ! -d "$repo_path" ]] || ! git -C "$repo_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    printf 'Not a Git checkout: %s\n' "$repo_path" >&2
+    return 2
+  fi
+  if [[ ! -f "$repo_path/update.sh" ]]; then
+    printf 'No update.sh found in: %s\n' "$repo_path" >&2
+    return 2
+  fi
+  branch="$(git -C "$repo_path" branch --show-current 2>/dev/null || true)"
+  branch="${branch:-detached HEAD}"
+  printf '\nCheckout: %s\nBranch:   %s\n' "$repo_path" "$branch"
+
+  if (( assume_yes == 0 )); then
+    read -r -p 'Pull fast-forward updates and reinstall? [y/N]: ' answer || return 1
+    case "$answer" in
+      [Yy]|[Yy][Ee][Ss]) ;;
+      *) printf 'Update cancelled.\n'; return 0 ;;
+    esac
+  fi
+
+  printf '\nStarting Dark Host update...\n'
+  bash "$repo_path/update.sh"
 }
 
 __darkhost_version() {
@@ -971,7 +1151,7 @@ __darkhost_paste() {
 
 __darkhost_suggest() {
   local input="${1:-}"
-  local current_word suggestion candidate count=0
+  local current_word suggestion candidate count=0 context="" rest subcommand
   local -a suggestions=(
     help status system user profile network memory storage processes scan install media play
     tools theme settings update version about logout lock pause resume clear dashboard matrix
@@ -984,29 +1164,6 @@ __darkhost_suggest() {
     return 0
   fi
 
-  if [[ "$input" == "dh "* ]]; then
-    current_word="${input##* }"
-    if [[ "$input" == "dh theme "* ]]; then
-      suggestions=(black blood matrix ghost void cyber terminal)
-      current_word="${input##* }"
-    elif [[ "$input" == "dh mode "* ]]; then
-      suggestions=(normal hacker ghost matrix forensic void minimal)
-      current_word="${input##* }"
-    elif [[ "$input" == "dh banner "* ]]; then
-      suggestions=(on off toggle)
-      current_word="${input##* }"
-    fi
-    printf '\nSuggestions for %s:\n' "$input"
-    for suggestion in "${suggestions[@]}"; do
-      if [[ "$suggestion" == "$current_word"* ]]; then
-        printf '  dh %s\n' "$suggestion"
-        count=$((count + 1))
-        (( count >= 12 )) && break
-      fi
-    done
-    return 0
-  fi
-
   if [[ "$input" == "dh" ]]; then
     printf '\nSuggestions for dh:\n'
     for suggestion in "${suggestions[@]}"; do
@@ -1014,6 +1171,39 @@ __darkhost_suggest() {
       printf '  dh %s\n' "$suggestion"
       count=$((count + 1))
       (( count >= 12 )) && break
+    done
+    return 0
+  fi
+
+  if [[ "$input" == "dh "* ]]; then
+    rest="${input#dh }"
+    subcommand="${rest%% *}"
+    current_word="${rest##* }"
+    context="dh"
+    if [[ "$rest" == *' '* ]]; then
+      case "$subcommand" in
+        theme) suggestions=(black blood matrix ghost void cyber terminal) ;;
+        mode) suggestions=(normal hacker ghost matrix forensic void minimal) ;;
+        banner) suggestions=(on off toggle) ;;
+        media) suggestions=(play pause stop info help) ;;
+        *) return 0 ;;
+      esac
+      context="dh $subcommand"
+    else
+      suggestions=(
+        help status system user profile network memory storage processes scan install media play
+        tools theme settings update version about logout lock pause resume clear dashboard matrix
+        hacker banner mode history vault monitor ping ports battery wifi device uptime logs sessions
+        security alias plugin doctor repair ghost void 404 shadow root
+      )
+    fi
+    printf '\nSuggestions for %s:\n' "$input"
+    for suggestion in "${suggestions[@]}"; do
+      if [[ "$suggestion" == "$current_word"* ]]; then
+        printf '  %s %s\n' "$context" "$suggestion"
+        count=$((count + 1))
+        (( count >= 12 )) && break
+      fi
     done
     return 0
   fi
@@ -1128,7 +1318,7 @@ dh() {
     tools) printf 'pkg apt git python node npm ssh\n' ;;
     theme) __darkhost_theme "${2:-}" ;;
     settings) __darkhost_settings ;;
-    update) __darkhost_update ;;
+    update) shift; __darkhost_update "$@" ;;
     version) __darkhost_version ;;
     about) __darkhost_about ;;
     logout) printf 'Dark Host session terminated.\n'; exit 0 ;;

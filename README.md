@@ -43,11 +43,11 @@ If the installer runs without an interactive terminal, it creates the default pr
 | Session | `dh lock`, `dh logout`, `dh pause`, `dh resume`, `dh history`, `dh logs` |
 | Maintenance | `dh install <package>`, `dh doctor`, `dh repair`, `dh update`, `dh help` |
 
-Get the full list with `dh help`; get details on a command with `dh help <command>`. Press Tab after `dh` to complete commands, Ctrl+Space to show word suggestions for the current command line, and use the arrow keys to search command history. Paste clipboard text with Alt+V, Alt+Shift+V, or Ctrl+P.
+Get the full list with `dh help`; get details on a command with `dh help <command>`. Press Tab after `dh` to complete commands, or Ctrl+Space to print matching suggestions for the current command line. Use the arrow keys to search command history. Paste clipboard text with Alt+V, Alt+Shift+V, or Ctrl+P.
 
-Open local media or a URL with the short command `mp <file-or-url>`, or use `dh media play <file-or-url>`. Bash filename completion works with `mp` for local files. Audio uses Termux:API when available, otherwise Dark Host tries `mpv` or the system opener. Video and pictures open in the Android or desktop app associated with that file type, with `mpv` as a fallback. `dh media pause`, `stop`, and `info` use Termux:API controls.
+Play a local file or URL with `mp <file-or-url>`, or search by title with `mp <search terms>` (for example, `mp lofi beats`). Quote paths that contain spaces. `mpv` handles stream URLs when installed; images open in the associated Android or desktop app. Local audio uses Termux:API when available, then falls back to `mpv` or the system opener. Name searches require both `yt-dlp` and `mpv`; install them with `dh install yt-dlp mpv`. `dh media pause`, `stop`, and `info` use Termux:API controls.
 
-For Termux playback controls, install the `termux-api` package and its matching Termux:API Android app. `mpv` can be installed as an optional player with `dh install mpv`. Playback depends on the installed app and codecs; no single player supports literally every format.
+For Termux playback controls, install the `termux-api` package and its matching Termux:API Android app. Playback depends on the installed app and codecs; no single player supports every format.
 
 Install packages with the detected system package manager:
 
@@ -65,13 +65,13 @@ Available themes include `black`, `blood`, `matrix`, `ghost`, `void`, `cyber`, a
 
 ## Update or Remove
 
-To update from the repository:
+Run `dh update` from an interactive terminal to choose the Git checkout path (default: `~/Dark`) and confirm the update. It shows the selected branch before proceeding and leaves the terminal screen intact. To run non-interactively, pass an explicit path and confirmation flag:
 
 ```bash
-cd ~/Dark
-git pull --ff-only
-./install.sh
+dh update --yes "$HOME/Dark"
 ```
+
+The updater uses `git pull --ff-only` and refreshes the Dark Host engine. It stops if the checkout cannot be updated as a fast-forward, preserves your existing Bash and Termux settings, and skips the setup wizard during upgrades.
 
 To remove the shell layer and restore backed-up startup files:
 
